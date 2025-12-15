@@ -57,6 +57,16 @@ const fileToBase64 = (file: File): Promise<string> => {
   });
 };
 
+// --- HELPER: UUID Generator ---
+const generateUUID = () => {
+  // @ts-ignore
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+    var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 // --- HELPER: Upload Image to Supabase Storage ---
 const uploadImage = async (file: File): Promise<string | null> => {
   try {
@@ -126,7 +136,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin, onRegi
       }
 
       const newUser: UserAccount = {
-        id: `user-${Date.now()}`,
+        id: self.crypto.randomUUID(),
         email,
         password,
         name,
@@ -397,9 +407,27 @@ const App: React.FC = () => {
   // Loading State
   const [isLoadingData, setIsLoadingData] = useState(true);
 
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('currentUser');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  // Session Persistence
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('currentUser');
+    }
+  }, [currentUser]);
+
   const [currentView, setCurrentView] = useState<AppView>('HOME');
   const [isLoading, setIsLoading] = useState(false); // Transition state
+  const [editingTeam, setEditingTeam] = useState<Team | null>(null); // New state for editing team
 
   // FETCH DATA FROM SUPABASE
   useEffect(() => {
@@ -408,10 +436,10 @@ const App: React.FC = () => {
       try {
         const [usersRes, teamsRes, matchesRes, arenasRes, tournamentsRes, notifRes, socialRes] = await Promise.all([
           supabase.from('users').select('*'),
-          supabase.from('teams').select('*'),
-          supabase.from('matches').select('*'),
+          supabase.from('teams').select('*').eq('is_deleted', false),
+          supabase.from('matches').select('*').eq('is_deleted', false),
           supabase.from('arenas').select('*'),
-          supabase.from('tournaments').select('*'),
+          supabase.from('tournaments').select('*').eq('is_deleted', false),
           supabase.from('notifications').select('*'),
           supabase.from('social_connections').select('*')
         ]);
@@ -579,7 +607,8 @@ const App: React.FC = () => {
     setIsEditingTeam(false);
   };
 
-  const handleUpdateProfile = (updatedUser: UserAccount) => {
+  const handleUpdateProfile = async (updatedUser: UserAccount) => {
+    // 1. Update Local State
     setUserAccounts(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
     if (currentUser && currentUser.id === updatedUser.id) {
       setCurrentUser(prev => prev ? ({
@@ -587,11 +616,25 @@ const App: React.FC = () => {
         name: updatedUser.name,
         location: updatedUser.location,
         avatar: updatedUser.avatar,
-        teamId: updatedUser.teamId, // Update context if changed
-        role: updatedUser.role // Ensure role is updated in session
+        teamId: updatedUser.teamId,
+        role: updatedUser.role
       }) : null);
     }
-    alert("Perfil atualizado com sucesso!");
+
+    // 2. Update Supabase
+    const { error } = await supabase.from('users').update({
+      name: updatedUser.name,
+      location: updatedUser.location,
+      avatar: updatedUser.avatar,
+      team_id: updatedUser.teamId
+    }).eq('id', updatedUser.id);
+
+    if (error) {
+      console.error("Error updating profile in DB:", error);
+      alert("Erro ao salvar perfil no banco de dados.");
+    } else {
+      alert("Perfil atualizado com sucesso!");
+    }
   };
 
   // --- Actions ---
@@ -603,28 +646,7 @@ const App: React.FC = () => {
     return (match && match[2].length === 11) ? match[2] : null;
   };
 
-  // --- IMAGE UPLOAD (Mock/Supabase Hybrid) ---
-  const uploadImage = async (file: File): Promise<string | null> => {
-    if (!file) return null;
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Math.random()}.${fileExt}`;
-      const filePath = `${fileName}`;
 
-      const { data, error } = await supabase.storage.from('images').upload(filePath, file);
-
-      if (error) {
-        console.warn("Supabase Storage Upload failed (bucket might be missing), falling back to local URL:", error);
-        return URL.createObjectURL(file);
-      }
-
-      const { data: { publicUrl } } = supabase.storage.from('images').getPublicUrl(filePath);
-      return publicUrl;
-    } catch (error) {
-      console.error("Upload error:", error);
-      return URL.createObjectURL(file);
-    }
-  };
 
   const handleTogglePlayerRole = async (userId: string, teamId: string, shouldBePlayer: boolean) => {
     const team = teams.find(t => t.id === teamId);
@@ -686,9 +708,12 @@ const App: React.FC = () => {
       }
     }
 
+    const newMatchId = (editingMatch && editingMatch.id) ? editingMatch.id : generateUUID();
+    console.log("DEBUG: Generated New Match ID:", newMatchId);
+
     const newMatch: Match = {
-      id: editingMatch ? editingMatch.id : `m${Date.now()}`,
-      createdBy: editingMatch ? editingMatch.createdBy : currentUser.id,
+      id: newMatchId,
+      createdBy: (editingMatch && editingMatch.createdBy) ? editingMatch.createdBy : currentUser.id,
       isDeleted: false,
       homeTeamId: formData.get('homeTeamId') as string,
       awayTeamId: formData.get('awayTeamId') as string,
@@ -696,7 +721,7 @@ const App: React.FC = () => {
       arenaId: formData.get('arenaId') as string,
       type: formData.get('type') as MatchType,
       sportType: formData.get('sportType') as SportType,
-      status: editingMatch ? editingMatch.status : MatchStatus.SCHEDULED,
+      status: (editingMatch && editingMatch.status) ? editingMatch.status : MatchStatus.SCHEDULED,
       tournamentId: formData.get('tournamentId') ? formData.get('tournamentId') as string : undefined,
       round: formData.get('round') as string,
       homeScore: editingMatch?.homeScore || 0,
@@ -706,7 +731,7 @@ const App: React.FC = () => {
       homeTactics: editingMatch?.homeTactics,
       awayTactics: editingMatch?.awayTactics,
       youtubeVideoId: videoId || editingMatch?.youtubeVideoId,
-      media: editingMatch ? [...editingMatch.media, ...newMediaItems] : newMediaItems
+      media: editingMatch ? [...(editingMatch.media || []), ...newMediaItems] : newMediaItems
     };
 
     // }; removed from previous error
@@ -734,6 +759,8 @@ const App: React.FC = () => {
       youtube_video_id: newMatch.youtubeVideoId,
       media: newMatch.media
     };
+
+    console.log("DEBUG: Saving Match Payload to Supabase:", dbMatch);
 
     const { error } = await supabase.from('matches').upsert(dbMatch);
     if (error) {
@@ -801,7 +828,9 @@ const App: React.FC = () => {
     if (type === 'MATCH') {
       const item = matches.find(m => m.id === id);
       if (item && item.createdBy === currentUser.id) {
-        supabase.from('matches').update({ is_deleted: true }).eq('id', id).then(console.error);
+        supabase.from('matches').update({ is_deleted: true }).eq('id', id).then(({ error }) => {
+          if (error) console.error("Error deleting match:", error);
+        });
         setMatches(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true } : m));
         setSelectedMatchId(null);
         setIsMatchModalOpen(false);
@@ -811,8 +840,28 @@ const App: React.FC = () => {
     } else if (type === 'TEAM') {
       const item = teams.find(t => t.id === id);
       if (item && item.createdBy === currentUser.id) {
-        supabase.from('teams').update({ is_deleted: true }).eq('id', id).then(console.error);
+        supabase.from('teams').update({ is_deleted: true }).eq('id', id).then(({ error }) => {
+          if (error) console.error("Error deleting team:", error);
+        });
+
+        // 1. Remove team from list
         setTeams(prev => prev.map(t => t.id === id ? { ...t, isDeleted: true } : t));
+
+        // 2. If the creator was also a member of this team (likely), remove their association
+        if (currentUser.teamId === id) {
+          // Update DB
+          supabase.from('users').update({ team_id: null }).eq('id', currentUser.id).then(({ error }) => {
+            if (error) console.error("Error clearing user team_id:", error);
+          });
+
+          // Update Local State for Current User
+          const updatedUser = { ...currentUser, teamId: null, role: UserRole.DIRECTOR }; // Keep role Director or revert? Keeping Director is safer for now.
+          setCurrentUser(updatedUser);
+
+          // Update User Accounts List
+          setUserAccounts(prev => prev.map(u => u.id === currentUser.id ? { ...u, teamId: null } : u));
+        }
+
         setViewingTeamId(null);
       } else {
         alert("Você não tem permissão para excluir este time.");
@@ -820,7 +869,9 @@ const App: React.FC = () => {
     } else if (type === 'TOURNAMENT') {
       const item = tournaments.find(t => t.id === id);
       if (item && item.createdBy === currentUser.id) {
-        supabase.from('tournaments').update({ is_deleted: true }).eq('id', id).then(console.error);
+        supabase.from('tournaments').update({ is_deleted: true }).eq('id', id).then(({ error }) => {
+          if (error) console.error("Error deleting tournament:", error);
+        });
         setTournaments(prev => prev.map(t => t.id === id ? { ...t, isDeleted: true } : t));
         setSelectedTournamentId(null);
       } else {
@@ -1090,7 +1141,7 @@ const App: React.FC = () => {
     };
 
     const newTeam: Team = {
-      id: `t-${Date.now()}`,
+      id: self.crypto.randomUUID(), // Use valid UUID to prevent type errors in Supabase
       name: teamName,
       shortName: shortName,
       city,
@@ -1114,11 +1165,13 @@ const App: React.FC = () => {
       short_name: newTeam.shortName,
       city: newTeam.city,
       logo_color: newTeam.logoColor,
-      primary_color: newTeam.primaryColor,
-      secondary_color: newTeam.secondaryColor,
-      tertiary_color: newTeam.tertiaryColor,
-      cover: newTeam.cover,
-      profile_picture: newTeam.profilePicture,
+      // Removed new color fields to fix schema error
+      // primary_color: newTeam.primaryColor,
+      // secondary_color: newTeam.secondaryColor,
+      // tertiary_color: newTeam.tertiaryColor,
+      // usage of non-existent columns
+      // cover: newTeam.cover,
+      // profile_picture: newTeam.profilePicture,
       wins: 0, draws: 0, losses: 0, goals_for: 0, goals_against: 0, points: 0,
       roster: newTeam.roster, // Send roster with creator
       tactical_formation: [],
@@ -1130,6 +1183,7 @@ const App: React.FC = () => {
     const { error: teamError } = await supabase.from('teams').insert(dbTeam);
     if (teamError) {
       console.error("Error creating team:", teamError);
+      alert(`Erro ao criar time: ${teamError.message || teamError.details || JSON.stringify(teamError)}`);
       return;
     }
 
@@ -1153,62 +1207,87 @@ const App: React.FC = () => {
 
   const handleUpdateTeam = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!viewingTeamId) return;
+    if (!currentUser || !editingTeam) return;
+
     const formData = new FormData(event.currentTarget);
+    const teamName = formData.get('teamName') as string;
+    const shortName = formData.get('shortName') as string;
+    const city = formData.get('city') as string;
+    const sportType = formData.get('sportType') as SportType;
+    const primaryColor = formData.get('primaryColor') as string;
+    const secondaryColor = formData.get('secondaryColor') as string;
+    const tertiaryColor = formData.get('tertiaryColor') as string || '';
 
-    const updatedName = formData.get('name') as string;
-    const updatedColor = formData.get('logoColor') as string;
-
-    // Handle Cover File
+    // Handle Image Uploads
     const coverFile = formData.get('cover') as File;
-    let updatedCover = formData.get('existingCover') as string || '';
-    if (coverFile && coverFile.size > 0) {
-      const uploadedUrl = await uploadImage(coverFile);
-      if (uploadedUrl) updatedCover = uploadedUrl;
-    }
-
-    // Handle Profile Picture File
     const profileFile = formData.get('profilePicture') as File;
-    let updatedProfile = formData.get('existingProfile') as string || '';
-    if (profileFile && profileFile.size > 0) {
-      const uploadedUrl = await uploadImage(profileFile);
-      if (uploadedUrl) updatedProfile = uploadedUrl;
+
+    let coverUrl = editingTeam.cover; // Default to existing
+    // Check if file is actually uploaded (size > 0)
+    if (coverFile && coverFile.size > 0) {
+      const uploaded = await uploadImage(coverFile);
+      if (uploaded) coverUrl = uploaded;
     }
 
-    const teamToUpdate = {
-      ...getTeam(viewingTeamId),
-      name: updatedName,
-      logoColor: updatedColor,
-      cover: updatedCover,
-      profilePicture: updatedProfile
+    let profileUrl = editingTeam.profilePicture; // Default to existing
+    if (profileFile && profileFile.size > 0) {
+      const uploaded = await uploadImage(profileFile);
+      if (uploaded) profileUrl = uploaded;
+    }
+
+    console.log("Saving Team Update:", {
+      id: editingTeam.id,
+      primaryColor,
+      secondaryColor,
+      tertiaryColor,
+      coverUrl, // Debug
+      profileUrl // Debug
+    });
+
+    const updatedTeam: Team = {
+      ...editingTeam,
+      name: teamName,
+      shortName,
+      city,
+      sportType,
+      logoColor: primaryColor,
+      primaryColor,
+      secondaryColor,
+      tertiaryColor,
+      cover: coverUrl,
+      profilePicture: profileUrl
     };
 
+    // Update Local State
+    // Update Local State with new colors and images
+    setTeams(prev => prev.map(t => t.id === editingTeam.id ? updatedTeam : t));
 
-    const dbTeamUpdate = {
-      id: teamToUpdate.id,
-      name: teamToUpdate.name,
-      short_name: teamToUpdate.shortName,
-      city: teamToUpdate.city,
-      logo_color: teamToUpdate.logoColor,
-      cover: teamToUpdate.cover,
-      profile_picture: teamToUpdate.profilePicture,
-      wins: teamToUpdate.wins,
-      draws: teamToUpdate.draws,
-      losses: teamToUpdate.losses,
-      goals_for: teamToUpdate.goalsFor,
-      goals_against: teamToUpdate.goalsAgainst,
-      points: teamToUpdate.points,
-      roster: teamToUpdate.roster,
-      tactical_formation: teamToUpdate.tacticalFormation,
-      created_by: teamToUpdate.createdBy,
-      is_deleted: teamToUpdate.isDeleted
-    };
+    // Update Supabase
+    // Note: We are mapping primaryColor to logo_color for DB compatibility
+    // Images are not persisted to DB yet due to schema limitation, but are updated in local state for the session.
+    const { error } = await supabase.from('teams').update({
+      name: teamName,
+      short_name: shortName,
+      city,
+      logo_color: primaryColor, // Map Primary to Logo Color
+      // primary_color: primaryColor, // Future
+      // secondary_color: secondaryColor, // Future
+      // tertiary_color: tertiaryColor, // Future
+      // cover: coverUrl, // Future
+      // profile_picture: profileUrl // Future
+    }).eq('id', editingTeam.id);
 
-    await supabase.from('teams').update(dbTeamUpdate).eq('id', viewingTeamId);
+    if (error) {
+      console.error("Error updating team:", error);
+      alert("Erro ao atualizar time no banco de dados. " + error.message);
+    } else {
+      alert("Time atualizado com sucesso!");
+    }
 
-    setTeams(prev => prev.map(t => t.id === viewingTeamId ? teamToUpdate : t));
-    setIsEditingTeam(false);
+    setIsTeamModalOpen(false);
+    setEditingTeam(null);
   };
+
 
   // ARENA CRUD
   const handleCreateArena = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -1232,7 +1311,7 @@ const App: React.FC = () => {
     }
 
     const newArena: Arena = {
-      id: `arena-${Date.now()}`,
+      id: generateUUID(),
       name: formData.get('name') as string,
       address: formData.get('address') as string,
       lat: 0,
@@ -1253,12 +1332,19 @@ const App: React.FC = () => {
       cover_picture: newArena.coverPicture
     };
 
-    supabase.from('arenas').insert(dbArena).then(({ error }) => {
-      if (error) console.error("Error creating arena:", error);
-    });
+    const { error } = await supabase.from('arenas').insert(dbArena);
+
+    if (error) {
+      console.error("Error creating arena:", error);
+      alert(`Erro ao criar arena: ${error.message}`);
+      // Do not update local state if DB fails, to keep it consistent OR update and warn.
+      // Better to fail fast.
+      return;
+    }
 
     setArenas([...arenas, newArena]);
     setIsArenaModalOpen(false);
+    alert("Arena criada com sucesso!");
   };
 
   // TOURNAMENT CRUD
@@ -1846,6 +1932,7 @@ const App: React.FC = () => {
         } as UserAccount);
       }
 
+
       // Filter Matches
       const teamMatches = activeMatches.filter(m => m.homeTeamId === myTeam.id || m.awayTeamId === myTeam.id);
       const displayedMatches = teamMatchFilter === 'UPCOMING'
@@ -1879,11 +1966,34 @@ const App: React.FC = () => {
             </div>
 
             <div className="px-6 md:px-10 pb-6 relative z-10">
-              <div className="flex flex-col md:flex-row items-end -mt-20 mb-4 gap-6">
-                <div className="w-36 h-36 rounded-full border-4 border-white shadow-2xl flex items-center justify-center text-4xl font-bold text-white relative group bg-white overflow-hidden icon-hover" style={{ backgroundColor: myTeam.logoColor }}>
-                  {myTeam.shortName}
+              {/* MOBILE LAYOUT: Logo Left, Buttons/Info Right, Name Below */}
+              {/* DESKTOP LAYOUT: Logo Left, Name Right/Bottom */}
+              <div className="flex flex-col md:flex-row md:items-end -mt-16 md:-mt-20 mb-4 gap-4 md:gap-6">
+
+                <div className="flex justify-between items-end w-full md:w-auto">
+                  {/* LOGO */}
+                  <div className="w-24 h-24 md:w-36 md:h-36 rounded-full border-4 border-white shadow-2xl flex items-center justify-center text-2xl md:text-4xl font-bold text-white relative group bg-white overflow-hidden icon-hover shrink-0" style={{ backgroundColor: myTeam.logoColor }}>
+                    {myTeam.profilePicture ? (
+                      <img src={myTeam.profilePicture} alt={myTeam.shortName} className="w-full h-full object-cover" />
+                    ) : (
+                      <span>{myTeam.shortName}</span>
+                    )}
+                  </div>
+
+                  {/* MOBILE BUTTONS (Visible only on mobile next to logo) */}
+                  <div className="md:hidden flex gap-2 mb-2">
+                    <button onClick={() => handleFollow(myTeam.id)} className="btn-feedback bg-slate-900 text-white p-2 rounded-xl shadow-lg">
+                      <Heart size={20} className={socialGraph.some(s => s.followerId === currentUser!.id && s.targetId === myTeam.id) ? 'fill-red-500 text-red-500' : ''} />
+                    </button>
+                    {canManage && (
+                      <button onClick={() => { setSelectedTeamIdForInvite(myTeam.id); setIsInviteModalOpen(true); }} className="btn-feedback bg-emerald-600 text-white p-2 rounded-xl shadow-lg">
+                        <UserPlus size={20} />
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex-1 mb-2 text-white md:text-slate-900 md:pt-20">
+
+                <div className="flex-1 mb-2 text-slate-900 md:pt-20 w-full">
                   {isEditingTeam ? (
                     <form onSubmit={handleUpdateTeam} className="flex flex-col gap-3 max-w-full w-full md:max-w-md bg-white p-4 rounded-xl shadow-lg mt-4 md:mt-0 relative z-20">
                       <div>
@@ -1894,22 +2004,45 @@ const App: React.FC = () => {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="text-[10px] uppercase font-bold text-slate-400">Cor Principal</label>
-                          <input type="color" name="logoColor" defaultValue={myTeam.logoColor} className="h-8 w-full cursor-pointer rounded border border-slate-200" />
+                          <input type="color" name="primaryColor" defaultValue={myTeam.primaryColor || myTeam.logoColor} className="h-8 w-full cursor-pointer rounded border border-slate-200" />
                         </div>
                         <div>
-                          <label className="text-[10px] uppercase font-bold text-slate-400">Escudo (Avatar)</label>
-                          {/* HIDDEN INPUT FOR EXISTING VALUE */}
-                          {/* We don't actually need hidden input for existing if we only update on new file */}
-                          <input type="file" name="profilePicture" accept="image/*" className="text-xs w-full text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-slate-100 hover:file:bg-slate-200" />
+                          <label className="text-[10px] uppercase font-bold text-slate-400">Cor Secundária</label>
+                          <input type="color" name="secondaryColor" defaultValue={myTeam.secondaryColor || '#ffffff'} className="h-8 w-full cursor-pointer rounded border border-slate-200" />
                         </div>
                       </div>
 
-                      <div>
-                        <label className="text-[10px] uppercase font-bold text-slate-400">Alterar Capa</label>
-                        <input type="file" name="cover" accept="image/*" className="text-xs w-full text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-slate-100 hover:file:bg-slate-200" />
-                        <input type="hidden" name="existingCover" value={myTeam.cover || ''} />
-                        <input type="hidden" name="existingProfile" value={myTeam.profilePicture || ''} />
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" id="useTertiary" className="rounded text-emerald-600 focus:ring-emerald-500" defaultChecked={!!myTeam.tertiaryColor} onChange={(e) => {
+                          const el = document.getElementById('tertiaryColorInput');
+                          if (el) el.style.display = e.target.checked ? 'block' : 'none';
+                        }} />
+                        <label htmlFor="useTertiary" className="text-xs font-bold text-slate-500">Usar Terceira Cor</label>
                       </div>
+                      <div id="tertiaryColorInput" style={{ display: myTeam.tertiaryColor ? 'block' : 'none' }}>
+                        <label className="text-[10px] uppercase font-bold text-slate-400">Cor Terciária</label>
+                        <input type="color" name="tertiaryColor" defaultValue={myTeam.tertiaryColor || '#000000'} className="h-8 w-full cursor-pointer rounded border border-slate-200" />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] uppercase font-bold text-slate-400">Escudo (Avatar)</label>
+                          <input type="file" name="profilePicture" accept="image/*" className="text-xs w-full text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-slate-100 hover:file:bg-slate-200" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] uppercase font-bold text-slate-400">Alterar Capa</label>
+                          <input type="file" name="cover" accept="image/*" className="text-xs w-full text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-slate-100 hover:file:bg-slate-200" />
+                        </div>
+                      </div>
+
+                      {/* Explicitly warn user about image persistence */}
+                      <p className="text-[10px] text-amber-600 font-medium bg-amber-50 p-2 rounded">
+                        * Imagens salvas apenas nesta sessão (Limitação do Banco).
+                      </p>
+
+                      <input type="hidden" name="existingCover" value={myTeam.cover || ''} />
+                      <input type="hidden" name="existingProfile" value={myTeam.profilePicture || ''} />
+
 
                       <div className="flex gap-2 mt-1">
                         <button type="submit" className="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-xs font-bold shadow-md hover:bg-emerald-500 transition">Salvar Alterações</button>
@@ -1918,16 +2051,20 @@ const App: React.FC = () => {
                     </form>
                   ) : (
                     <>
-                      <h1 className="text-4xl md:text-5xl font-black md:text-slate-900 text-white drop-shadow-md md:drop-shadow-none">{myTeam.name}</h1>
-                      <div className="flex items-center gap-4 md:text-slate-500 text-white/90 font-medium mt-2">
-                        <span className="flex items-center gap-1 bg-white/20 md:bg-slate-100 px-2 py-1 rounded-full text-xs backdrop-blur-sm"><MapPin size={14} /> {myTeam.city}</span>
-                        <span className="flex items-center gap-1 bg-white/20 md:bg-slate-100 px-2 py-1 rounded-full text-xs backdrop-blur-sm"><Heart size={14} /> {fanCount} Torcedores</span>
-                        <span className="flex items-center gap-1 bg-white/20 md:bg-slate-100 px-2 py-1 rounded-full text-xs backdrop-blur-sm"><Users size={14} /> {myTeam.roster.length} Jogadores</span>
+                      <h1 className="text-3xl md:text-5xl font-black text-slate-800 bg-white/80 md:bg-transparent backdrop-blur-md md:backdrop-blur-none px-3 py-1 md:px-0 md:py-0 rounded-lg md:rounded-none inline-block shadow-sm md:shadow-none break-words w-full">
+                        {myTeam.name}
+                      </h1>
+                      <div className="flex items-center gap-4 text-slate-600 font-medium mt-2 flex-wrap">
+                        <span className="flex items-center gap-1 bg-white px-2 py-1 rounded-full text-xs shadow-sm"><MapPin size={14} /> {myTeam.city}</span>
+                        <span className="flex items-center gap-1 bg-white px-2 py-1 rounded-full text-xs shadow-sm"><Heart size={14} /> {fanCount} Torcedores</span>
+                        <span className="flex items-center gap-1 bg-white px-2 py-1 rounded-full text-xs shadow-sm"><Users size={14} /> {myTeam.roster.length} Jogadores</span>
                       </div>
                     </>
                   )}
                 </div>
-                <div className="mb-2 flex gap-3 self-end md:self-auto">
+
+                {/* DESKTOP BUTTONS (Hidden on mobile) */}
+                <div className="hidden md:flex mb-2 gap-3 self-end md:self-auto">
                   <button onClick={() => handleFollow(myTeam.id)} className="btn-feedback bg-slate-900 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-slate-800 flex items-center gap-2 shadow-lg">
                     <Heart size={18} className={socialGraph.some(s => s.followerId === currentUser!.id && s.targetId === myTeam.id) ? 'fill-red-500 text-red-500' : ''} />
                     {socialGraph.some(s => s.followerId === currentUser!.id && s.targetId === myTeam.id) ? 'Seguindo' : 'Seguir'}
@@ -2121,11 +2258,18 @@ const App: React.FC = () => {
               </div>
             </div>
           </div>
-        </div>
+        </div >
       );
     }
 
     // === UNIFIED TEAM LIST VIEW ===
+    console.log("DEBUG: check myTeams filter", {
+      currentUserId: currentUser?.id,
+      currentUserTeamId: currentUser?.teamId,
+      allTeamsCount: activeTeams.length,
+      sampleTeam: activeTeams[0]
+    });
+
     const myTeams = activeTeams.filter(t =>
       t.createdBy === currentUser!.id ||
       t.id === currentUser!.teamId
@@ -2134,6 +2278,67 @@ const App: React.FC = () => {
     const followedTeams = activeTeams.filter(t => followedTeamIds.includes(t.id) && !myTeams.includes(t));
     const localTeams = activeTeams.filter(t => t.city.toLowerCase() === (currentUser!.location || '').toLowerCase() && !myTeams.includes(t) && !followedTeams.includes(t));
     const exploreTeams = activeTeams.filter(t => !myTeams.includes(t) && !followedTeams.includes(t) && !localTeams.includes(t));
+
+    // --- Render Helper ---
+    const renderTeamSection = (title: string, teamList: Team[], Icon: React.ElementType, emptyMsg: string) => (
+      <div className="space-y-4">
+        <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 pl-2 border-l-4 border-emerald-500">
+          <Icon size={20} className="text-emerald-500" /> {title}
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {teamList.map(t => (
+            <div
+              key={t.id}
+              onClick={() => { setViewingTeamId(t.id); setViewingProfileId(null); }}
+              className="group relative bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer border border-slate-100 hover:border-emerald-200"
+            >
+              {/* Banner with Team Color */}
+              <div className="h-24 relative overflow-hidden">
+                <div
+                  className="absolute inset-0 bg-gradient-to-r from-slate-800 to-slate-900"
+                  style={t.primaryColor ? { background: `linear-gradient(135deg, ${t.primaryColor}, ${t.secondaryColor || t.primaryColor})` } : {}}
+                ></div>
+                {t.cover ? (
+                  <img src={t.cover} className="w-full h-full object-cover opacity-50 group-hover:opacity-70 transition duration-500" alt={t.name} />
+                ) : (
+                  <div className="absolute inset-0 bg-black/20 pattern-grid-lg opacity-30"></div>
+                )}
+                {/* City Badge */}
+                <span className="absolute top-2 right-2 bg-black/40 backdrop-blur text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <MapPin size={10} /> {t.city}
+                </span>
+              </div>
+
+              <div className="p-4 relative">
+                {/* Avatar overlapping banner */}
+                <div className="absolute -top-10 left-4 w-16 h-16 rounded-full border-4 border-white bg-white shadow-md flex items-center justify-center overflow-hidden z-10">
+                  {t.profilePicture ? (
+                    <img src={t.profilePicture} className="w-full h-full object-cover" alt={t.shortName} />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center font-black text-xl text-white" style={{ backgroundColor: t.primaryColor || t.logoColor || '#10b981' }}>
+                      {t.shortName.substring(0, 2)}
+                    </div>
+                  )}
+                </div>
+
+                <div className="ml-20 min-h-[40px] flex flex-col justify-center">
+                  <h4 className="font-black text-slate-900 leading-tight group-hover:text-emerald-700 transition">{t.name}</h4>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t.sportType}</span>
+                </div>
+
+                <div className="mt-4 flex items-center gap-4 text-xs font-medium text-slate-500 border-t border-slate-50 pt-3">
+                  <span className="flex items-center gap-1"><Users size={14} className="text-emerald-500" /> {t.roster.length} Jogadores</span>
+                  <span className="flex items-center gap-1"><Trophy size={14} className="text-amber-500" /> {t.wins || 0} Vitórias</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {teamList.length === 0 && emptyMsg && (
+          <div className="text-slate-400 text-sm italic py-4 pl-4 border-l-2 border-slate-100">{emptyMsg}</div>
+        )}
+      </div>
+    );
 
     return (
       <div className="space-y-12 animate-in fade-in duration-500">
@@ -2148,6 +2353,7 @@ const App: React.FC = () => {
             </button>
           )}
         </div>
+
 
         {/* 1. My Teams */}
         {renderTeamSection("Meus Times", myTeams, Crown, "Você não gerencia nem participa de nenhum time.")}
@@ -2212,28 +2418,44 @@ const App: React.FC = () => {
 
           {/* ROW 1: Context Filters (Tournaments/Friendly) */}
           {activeTournaments.length > 0 && (
-            <div className="flex glass-panel p-2 rounded-2xl overflow-x-auto max-w-full gap-2 interactive-card">
+            /* CATEGORY FILTERS */
+            <div className="flex flex-wrap gap-2 items-center">
               <button
                 onClick={() => setMatchContextFilter('ALL')}
-                className={`px-4 py-2 text-sm font-bold rounded-xl whitespace-nowrap transition btn-feedback ${matchContextFilter === 'ALL' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
+                className={`px-4 py-2 text-sm font-bold rounded-xl transition btn-feedback ${matchContextFilter === 'ALL' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
               >
                 Geral
               </button>
               <button
                 onClick={() => setMatchContextFilter('FRIENDLY')}
-                className={`px-4 py-2 text-sm font-bold rounded-xl whitespace-nowrap transition btn-feedback ${matchContextFilter === 'FRIENDLY' ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
+                className={`px-4 py-2 text-sm font-bold rounded-xl transition btn-feedback ${matchContextFilter === 'FRIENDLY' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
               >
                 Amistosos
               </button>
-              {activeTournaments.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => setMatchContextFilter(t.name)}
-                  className={`px-4 py-2 text-sm font-bold rounded-xl whitespace-nowrap transition btn-feedback ${matchContextFilter === t.name ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
-                >
-                  {t.name}
-                </button>
-              ))}
+              <button
+                onClick={() => setMatchContextFilter((matchContextFilter !== 'ALL' && matchContextFilter !== 'FRIENDLY') ? matchContextFilter : activeTournaments[0]?.name || 'TOURNAMENTS')}
+                className={`px-4 py-2 text-sm font-bold rounded-xl transition btn-feedback ${(matchContextFilter !== 'ALL' && matchContextFilter !== 'FRIENDLY') ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
+              >
+                Campeonatos
+              </button>
+
+              {/* TOURNAMENT SELECTOR (Only shows if "Campeonatos" is active) */}
+              {(matchContextFilter !== 'ALL' && matchContextFilter !== 'FRIENDLY') && activeTournaments.length > 0 && (
+                <div className="animate-in fade-in zoom-in-95 duration-200">
+                  <select
+                    value={activeTournaments.find(t => t.name === matchContextFilter)?.id || ''}
+                    onChange={(e) => {
+                      const found = activeTournaments.find(t => t.id === e.target.value);
+                      if (found) setMatchContextFilter(found.name);
+                    }}
+                    className="pl-3 pr-8 py-2 rounded-xl bg-white border border-slate-200 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
+                  >
+                    {activeTournaments.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           )}
 
@@ -2260,74 +2482,80 @@ const App: React.FC = () => {
         </div>
 
         {/* SECTION 1: PRIORITY GAMES ("My Games") */}
-        {myMatches.length > 0 && (
-          <div className="space-y-4">
-            <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 pl-2 border-l-4 border-emerald-500">
-              {currentUser!.role === UserRole.REFEREE ? 'Seus Jogos Atribuídos' : 'Seus Jogos & Times Seguidos'}
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {myMatches.map(m => (
-                <div key={m.id} onClick={() => setSelectedMatchId(m.id)} className="cursor-pointer">
-                  <MatchCard
-                    match={m} homeTeam={getTeam(m.homeTeamId)} awayTeam={getTeam(m.awayTeamId)} arena={getArena(m.arenaId)}
-                    userRole={currentUser!.role} onUpdateScore={handleUpdateScore} onEditDetails={(match) => { setEditingMatch(match); setIsMatchModalOpen(true); }}
-                    onTeamClick={handleTeamClick}
-                  />
-                </div>
-              ))}
+        {
+          myMatches.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 pl-2 border-l-4 border-emerald-500">
+                {currentUser!.role === UserRole.REFEREE ? 'Seus Jogos Atribuídos' : 'Seus Jogos & Times Seguidos'}
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {myMatches.map(m => (
+                  <div key={m.id} onClick={() => setSelectedMatchId(m.id)} className="cursor-pointer">
+                    <MatchCard
+                      match={m} homeTeam={getTeam(m.homeTeamId)} awayTeam={getTeam(m.awayTeamId)} arena={getArena(m.arenaId)}
+                      userRole={currentUser!.role} onUpdateScore={handleUpdateScore} onEditDetails={(match) => { setEditingMatch(match); setIsMatchModalOpen(true); }}
+                      onTeamClick={handleTeamClick}
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )
+        }
 
         {/* SECTION 2: OTHER GAMES (Toggle) */}
-        {otherMatches.length > 0 && (
-          <div className="space-y-6 pt-6 border-t border-slate-200/50">
-            {!showOtherGames ? (
-              <button
-                onClick={() => setShowOtherGames(true)}
-                className="w-full py-4 glass-panel rounded-2xl text-slate-500 font-bold hover:text-emerald-600 transition flex items-center justify-center gap-2 hover:shadow-lg interactive-card"
-              >
-                Ver Outros Jogos da Liga <ChevronDown size={18} />
-              </button>
-            ) : (
-              <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                <div className="flex justify-between items-center px-2">
-                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                    <Calendar size={18} className="text-slate-400" />
-                    Outros Jogos
-                  </h3>
-                  <button onClick={() => setShowOtherGames(false)} className="text-xs font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1 bg-white px-3 py-1 rounded-full shadow-sm btn-feedback">
-                    Ocultar <ChevronUp size={12} />
-                  </button>
+        {
+          otherMatches.length > 0 && (
+            <div className="space-y-6 pt-6 border-t border-slate-200/50">
+              {!showOtherGames ? (
+                <button
+                  onClick={() => setShowOtherGames(true)}
+                  className="w-full py-4 glass-panel rounded-2xl text-slate-500 font-bold hover:text-emerald-600 transition flex items-center justify-center gap-2 hover:shadow-lg interactive-card"
+                >
+                  Ver Outros Jogos da Liga <ChevronDown size={18} />
+                </button>
+              ) : (
+                <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                  <div className="flex justify-between items-center px-2">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                      <Calendar size={18} className="text-slate-400" />
+                      Outros Jogos
+                    </h3>
+                    <button onClick={() => setShowOtherGames(false)} className="text-xs font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1 bg-white px-3 py-1 rounded-full shadow-sm btn-feedback">
+                      Ocultar <ChevronUp size={12} />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {otherMatches.map(m => (
+                      <div key={m.id} onClick={() => setSelectedMatchId(m.id)} className="cursor-pointer">
+                        <MatchCard
+                          match={m} homeTeam={getTeam(m.homeTeamId)} awayTeam={getTeam(m.awayTeamId)} arena={getArena(m.arenaId)}
+                          userRole={currentUser!.role} onUpdateScore={handleUpdateScore} onEditDetails={(match) => { setEditingMatch(match); setIsMatchModalOpen(true); }}
+                          onTeamClick={handleTeamClick}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {otherMatches.map(m => (
-                    <div key={m.id} onClick={() => setSelectedMatchId(m.id)} className="cursor-pointer">
-                      <MatchCard
-                        match={m} homeTeam={getTeam(m.homeTeamId)} awayTeam={getTeam(m.awayTeamId)} arena={getArena(m.arenaId)}
-                        userRole={currentUser!.role} onUpdateScore={handleUpdateScore} onEditDetails={(match) => { setEditingMatch(match); setIsMatchModalOpen(true); }}
-                        onTeamClick={handleTeamClick}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )
+        }
 
-        {myMatches.length === 0 && otherMatches.length === 0 && (
-          <div className="text-center py-20 glass-panel rounded-3xl border-dashed border-2 border-slate-300 interactive-card">
-            <Calendar size={48} className="mx-auto text-slate-300 mb-4" />
-            <p className="text-slate-500 font-medium">Nenhum jogo encontrado.</p>
-            {canManage && (
-              <button onClick={() => setIsMatchModalOpen(true)} className="mt-4 text-emerald-600 font-bold hover:underline btn-feedback">
-                Criar uma partida agora
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+        {
+          myMatches.length === 0 && otherMatches.length === 0 && (
+            <div className="text-center py-20 glass-panel rounded-3xl border-dashed border-2 border-slate-300 interactive-card">
+              <Calendar size={48} className="mx-auto text-slate-300 mb-4" />
+              <p className="text-slate-500 font-medium">Nenhum jogo encontrado.</p>
+              {canManage && (
+                <button onClick={() => setIsMatchModalOpen(true)} className="mt-4 text-emerald-600 font-bold hover:underline btn-feedback">
+                  Criar uma partida agora
+                </button>
+              )}
+            </div>
+          )
+        }
+      </div >
     );
   };
 
@@ -2696,7 +2924,7 @@ const App: React.FC = () => {
               <button onClick={() => { setIsFabMenuOpen(false); setEditingMatch(null); setIsMatchModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback">
                 <Calendar size={18} /> Novo Jogo
               </button>
-              <button onClick={() => { setIsFabMenuOpen(false); setIsTeamModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback">
+              <button onClick={() => { setIsFabMenuOpen(false); setEditingTeam(null); setIsTeamModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback">
                 <Users size={18} /> Novo Time
               </button>
               <button onClick={() => { setIsFabMenuOpen(false); setIsTournamentModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback">
@@ -2731,14 +2959,27 @@ const App: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mandante</label>
-                  <select name="homeTeamId" defaultValue={editingMatch?.homeTeamId} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required>
-                    {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  <select
+                    name="homeTeamId"
+                    defaultValue={editingMatch?.homeTeamId}
+                    className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200"
+                    required
+                    onChange={(e) => {
+                      // Force re-render to update away team filter
+                      setEditingMatch(prev => ({ ...(prev || {} as any), homeTeamId: e.target.value }));
+                    }}
+                  >
+                    <option value="" disabled selected={!editingMatch}>Selecione...</option>
+                    {activeTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Visitante</label>
                   <select name="awayTeamId" defaultValue={editingMatch?.awayTeamId} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required>
-                    {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    <option value="" disabled selected={!editingMatch}>Selecione...</option>
+                    {activeTeams
+                      .filter(t => t.id !== (editingMatch?.homeTeamId || (document.querySelector('[name="homeTeamId"]') as HTMLSelectElement)?.value))
+                      .map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
               </div>
@@ -2772,13 +3013,7 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Campeonato (Opcional)</label>
-                <select name="tournamentId" defaultValue={editingMatch?.tournamentId || ''} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <option value="">Nenhum</option>
-                  {activeTournaments.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </div>
+              {/* Tournament Select Removed */}
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Vídeo Youtube (Link)</label>
@@ -2806,28 +3041,28 @@ const App: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
           <div className="glass-panel text-slate-900 mx-auto w-full max-w-md rounded-3xl p-8">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-black">Criar Novo Time</h2>
-              <button onClick={() => setIsTeamModalOpen(false)}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
+              <h2 className="text-2xl font-black">{editingTeam ? 'Editar Time' : 'Criar Novo Time'}</h2>
+              <button onClick={() => { setIsTeamModalOpen(false); setEditingTeam(null); }}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
             </div>
-            <form onSubmit={handleCreateTeam} className="space-y-4">
+            <form onSubmit={editingTeam ? handleUpdateTeam : handleCreateTeam} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Time</label>
-                <input type="text" name="teamName" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="Ex: Rocket FC" />
+                <input type="text" name="teamName" defaultValue={editingTeam?.name} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="Ex: Rocket FC" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Sigla (3 letras)</label>
-                  <input type="text" name="shortName" maxLength={3} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 uppercase" required placeholder="ROC" />
+                  <input type="text" name="shortName" defaultValue={editingTeam?.shortName} maxLength={3} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 uppercase" required placeholder="ROC" />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cidade Sede</label>
-                  <input type="text" name="city" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="São Paulo" />
+                  <input type="text" name="city" defaultValue={editingTeam?.city} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="São Paulo" />
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Modalidade Principal</label>
-                <select name="sportType" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
+                <select name="sportType" defaultValue={editingTeam?.sportType || 'FUT7'} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
                   {Object.entries(SPORT_TYPE_DETAILS).map(([key, val]) => (
                     <option key={key} value={key}>{val.label}</option>
                   ))}
@@ -2839,15 +3074,15 @@ const App: React.FC = () => {
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <span className="text-[10px] text-slate-400">Primária*</span>
-                    <input type="color" name="primaryColor" defaultValue="#10b981" className="w-full h-10 rounded cursor-pointer" />
+                    <input type="color" name="primaryColor" defaultValue={editingTeam?.primaryColor || '#10b981'} className="w-full h-10 rounded cursor-pointer" />
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400">Secundária*</span>
-                    <input type="color" name="secondaryColor" defaultValue="#0f172a" className="w-full h-10 rounded cursor-pointer" />
+                    <input type="color" name="secondaryColor" defaultValue={editingTeam?.secondaryColor || '#0f172a'} className="w-full h-10 rounded cursor-pointer" />
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400">Terciária</span>
-                    <input type="color" name="tertiaryColor" className="w-full h-10 rounded cursor-pointer" />
+                    <input type="color" name="tertiaryColor" defaultValue={editingTeam?.tertiaryColor || ''} className="w-full h-10 rounded cursor-pointer" />
                   </div>
                 </div>
               </div>
@@ -2863,7 +3098,9 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 mt-2">Criar Time</button>
+              <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 mt-2">
+                {editingTeam ? 'Atualizar Time' : 'Criar Time'}
+              </button>
             </form>
           </div >
         </div >
