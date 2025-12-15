@@ -2549,7 +2549,7 @@ const App: React.FC = () => {
   // --- Main Render ---
 
   return (
-    <div className="min-h-screen font-sans relative">
+    <div className="min-h-screen font-sans relative bg-slate-50 text-slate-800">
       {/* Navbar */}
       {currentUser && (
         <nav className="glass-panel-dark text-white sticky top-4 z-40 mx-4 rounded-2xl mb-6 shadow-2xl backdrop-blur-xl">
@@ -2647,7 +2647,7 @@ const App: React.FC = () => {
       )}
 
       {/* --- Main Content --- */}
-      <main className="max-w-7xl mx-auto w-full p-4 md:p-6 pb-32 relative z-10">
+      <main className="max-w-7xl mx-auto w-full p-4 md:p-6 pb-24 md:pb-12 relative z-10">
         {currentView === 'HOME' && renderHomeView()}
         {currentView === 'TEAMS' && renderTeamsView()}
         {currentView === 'MATCHES' && renderMatchesView()}
