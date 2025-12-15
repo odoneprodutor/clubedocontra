@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  app:
+    image: clube-do-contra-app
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    restart: always
