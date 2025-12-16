@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserAccount, UserRole, Team, CurrentUser, PlayerStats, SocialConnection } from '../types';
 import {
-   Camera, Edit2, MapPin, Calendar, Mail, Shield, Crown, Save, X, Activity, Heart, ArrowLeft, Lock, AlertTriangle, Moon, Sun
+   Camera, Edit2, MapPin, Calendar, Mail, Shield, Crown, Save, X, Activity, Heart, ArrowLeft, Lock, AlertTriangle, Moon, Sun, ChevronDown
 } from 'lucide-react';
 import { ROLE_DESCRIPTIONS } from '../constants';
 
@@ -29,9 +29,18 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
    const isFollowing = socialGraph.some(s => s.followerId === currentUser.id && s.targetId === viewingUser.id);
    const isDirector = currentUser.role === UserRole.DIRECTOR;
 
-   // Check if director is also in roster
-   const myTeam = viewingUser.teamId ? teams.find(t => t.id === viewingUser.teamId) : null;
-   const isAlsoPlayer = myTeam ? myTeam.roster.some(p => p.userId === viewingUser.id) : false;
+   // Get all teams user is part of (Roster or Primary Link)
+   const allUserTeams = teams.filter(t =>
+      t.id === viewingUser.teamId ||
+      t.roster.some(p => p.userId === viewingUser.id)
+   );
+
+   // Local state for which team to view details for
+   const [activeTeamId, setActiveTeamId] = useState<string | null>(viewingUser.teamId || (allUserTeams.length > 0 ? allUserTeams[0].id : null));
+
+   // Check if director is also in roster of the ACTIVE team
+   const activeTeam = activeTeamId ? teams.find(t => t.id === activeTeamId) : null;
+   const isAlsoPlayer = activeTeam ? activeTeam.roster.some(p => p.userId === viewingUser.id) : false;
 
    const [isEditing, setIsEditing] = useState(false);
    const [isUploading, setIsUploading] = useState(false); // New Loading State
@@ -49,19 +58,23 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
       teamId: viewingUser.teamId || ''
    });
 
-   // Calculate Player Stats if applicable
+   // Calculate Player Stats if applicable for the ACTIVE team
    const getPlayerStats = (): PlayerStats | null => {
-      if (viewingUser.role === UserRole.PLAYER && viewingUser.teamId) {
-         const team = teams.find(t => t.id === viewingUser.teamId);
-         const player = team?.roster.find(p => p.id === viewingUser.relatedPlayerId);
-         if (!player && team) return team.roster[0]?.stats || null;
+      if (viewingUser.role === UserRole.PLAYER && activeTeam) {
+         const player = activeTeam.roster.find(p => p.userId === viewingUser.id || p.id === viewingUser.relatedPlayerId);
+         if (!player) return activeTeam.roster[0]?.stats || null; // Fallback
          return player?.stats || null;
       }
       return null;
    };
 
    const playerStats = getPlayerStats();
-   const linkedTeam = teams.find(t => t.id === viewingUser.teamId);
+
+   // Sync activeTeamId when viewingUser changes
+   useEffect(() => {
+      if (viewingUser.teamId) setActiveTeamId(viewingUser.teamId);
+      else if (allUserTeams.length > 0) setActiveTeamId(allUserTeams[0].id);
+   }, [viewingUser.id, allUserTeams.length]);
 
    const handleSave = (e: React.FormEvent) => {
       e.preventDefault();
@@ -97,8 +110,8 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
    const canEditTeam = viewingUser.role === UserRole.FAN;
 
    return (
-      <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 pb-20">
-         <button onClick={onClose} className="flex items-center gap-2 text-slate-500 hover:text-slate-800 mb-4 transition">
+      <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 pb-20 pt-32 md:pt-0 relative z-30">
+         <button onClick={onClose} className="absolute top-4 left-4 md:static flex items-center gap-2 text-slate-500 hover:text-slate-800 mb-4 transition z-50 bg-white/50 backdrop-blur md:bg-transparent rounded-full px-3 py-1">
             <ArrowLeft size={16} /> Voltar
          </button>
 
@@ -324,7 +337,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                      {playerStats && !isEditing && (
                         <div className="animate-in fade-in">
                            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                              <Activity size={18} className="text-emerald-500" /> Estatísticas da Temporada
+                              <Activity size={18} className="text-emerald-500" /> Estatísticas da Temporada {activeTeam && <span className="text-slate-400 text-xs">({activeTeam.name})</span>}
                            </h3>
                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                               <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
@@ -374,9 +387,25 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
 
                      {/* TEAM CARD */}
                      <div>
-                        <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 text-sm uppercase tracking-wide">
-                           {viewingUser.role === UserRole.FAN ? 'Time do Coração' : 'Vínculo Oficial'}
-                        </h3>
+                        <div className="flex justify-between items-center mb-3">
+                           <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm uppercase tracking-wide">
+                              {viewingUser.role === UserRole.FAN ? 'Time do Coração' : 'Vínculo / Times'}
+                           </h3>
+                           {allUserTeams.length > 1 && !isEditing && (
+                              <div className="relative">
+                                 <select
+                                    value={activeTeamId || ''}
+                                    onChange={(e) => setActiveTeamId(e.target.value)}
+                                    className="appearance-none bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold px-3 py-1 pr-8 rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                 >
+                                    {allUserTeams.map(t => (
+                                       <option key={t.id} value={t.id}>{t.name}</option>
+                                    ))}
+                                 </select>
+                                 <ChevronDown size={14} className="absolute right-2 top-1.5 text-slate-400 pointer-events-none" />
+                              </div>
+                           )}
+                        </div>
 
                         {isEditing && canEditTeam ? (
                            <select
@@ -390,18 +419,18 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                               ))}
                            </select>
                         ) : (
-                           linkedTeam ? (
-                              <div onClick={() => onTeamClick(linkedTeam.id)} className="group bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md hover:border-emerald-400 transition cursor-pointer relative overflow-hidden">
+                           activeTeam ? (
+                              <div onClick={() => onTeamClick(activeTeam.id)} className="group bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md hover:border-emerald-400 transition cursor-pointer relative overflow-hidden">
                                  <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition">
                                     <Crown size={48} />
                                  </div>
                                  <div className="flex items-center gap-3 relative z-10">
-                                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold shadow-md" style={{ backgroundColor: linkedTeam.logoColor }}>
-                                       {linkedTeam.shortName}
+                                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold shadow-md" style={{ backgroundColor: activeTeam.logoColor }}>
+                                       {activeTeam.shortName}
                                     </div>
                                     <div>
-                                       <div className="font-bold text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition">{linkedTeam.name}</div>
-                                       <div className="text-xs text-slate-500 dark:text-slate-400">{linkedTeam.city}</div>
+                                       <div className="font-bold text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition">{activeTeam.name}</div>
+                                       <div className="text-xs text-slate-500 dark:text-slate-400">{activeTeam.city}</div>
                                     </div>
                                  </div>
                               </div>
@@ -411,7 +440,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                               </div>
                            )
                         )}
-                        {isEditing && !canEditTeam && linkedTeam && (
+                        {isEditing && !canEditTeam && activeTeam && (
                            <p className="text-[10px] text-slate-400 mt-2">
                               * O vínculo do time para Diretores, Técnicos e Jogadores é estrutural e não pode ser alterado aqui. Saia do time atual para entrar em outro.
                            </p>

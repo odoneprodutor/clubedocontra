@@ -129,6 +129,7 @@ export interface Tournament extends BaseEntity {
   maxTeams?: number; // New input field
   participatingTeamIds: string[]; // No ? because we init as []
   city?: string; // Standardized city for filtering
+  scope?: 'MUNICIPAL' | 'ESTADUAL' | 'NACIONAL' | 'PARTICULAR'; // Added visibility scope
   detailedStats?: Record<string, any>; // JSONB stats
 }
 

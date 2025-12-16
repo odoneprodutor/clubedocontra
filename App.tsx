@@ -168,10 +168,11 @@ const CitySelect: React.FC<CitySelectProps> = ({ value, onChange, className, req
       <input type="hidden" name={name} value={selectedCity && selectedState ? `${selectedCity} - ${selectedState}` : ''} />
       <div className="col-span-1">
         <select
-          className="w-full p-3 bg-slate-50 dark:bg-slate-800 dark:border-slate-700 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition"
+          className="w-full py-3 px-0 text-center bg-slate-50 dark:bg-slate-800 dark:border-slate-700 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition appearance-none"
           value={selectedState}
           onChange={handleStateChange}
           required={required}
+          style={{ textAlignLast: 'center' }} // Force center alignment for options in some browsers
         >
           <option value="">UF</option>
           {states.map(s => <option key={s.id} value={s.sigla}>{s.sigla}</option>)}
@@ -185,7 +186,7 @@ const CitySelect: React.FC<CitySelectProps> = ({ value, onChange, className, req
           required={required}
           disabled={!selectedState || loading}
         >
-          <option value="">{loading ? 'Carregando...' : 'Selecione a Cidade'}</option>
+          <option value="">{loading ? 'Carregando...' : 'Cidade'}</option>
           {cities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
         </select>
       </div>
@@ -646,6 +647,7 @@ const App: React.FC = () => {
   const [selectedPlayerForProfile, setSelectedPlayerForProfile] = useState<{ player: Player, teamName: string } | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
+  const [dashboardTeamId, setDashboardTeamId] = useState<string | null>(null);
 
   // Refs
   const notificationRef = useRef<HTMLDivElement>(null);
@@ -662,6 +664,13 @@ const App: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Sync Dashboard Team with User Team initially
+  useEffect(() => {
+    if (currentUser?.teamId) {
+      setDashboardTeamId(currentUser.teamId);
+    }
+  }, [currentUser]);
 
   // --- View Transition Handler ---
   const changeView = (newView: AppView) => {
@@ -1504,6 +1513,8 @@ const App: React.FC = () => {
     const formData = new FormData(event.currentTarget);
     const maxTeams = parseInt(formData.get('maxTeams') as string) || 4;
     const format = formData.get('format') as 'LEAGUE' | 'KNOCKOUT';
+    const scope = formData.get('scope') as 'MUNICIPAL' | 'ESTADUAL' | 'NACIONAL' | 'PARTICULAR' || 'PARTICULAR';
+    const city = formData.get('city') as string || '';
 
     // Auto-calculate rounds
     let calculatedRounds = 1;
@@ -1520,6 +1531,8 @@ const App: React.FC = () => {
       name: formData.get('name') as string,
       format: format,
       sportType: formData.get('sportType') as SportType,
+      scope: scope,
+      city: city,
       status: 'ACTIVE',
       currentRound: 1,
       totalRounds: calculatedRounds,
@@ -1537,7 +1550,9 @@ const App: React.FC = () => {
       total_rounds: newTournament.totalRounds,
       participating_team_ids: newTournament.participatingTeamIds,
       created_by: newTournament.createdBy,
-      is_deleted: newTournament.isDeleted
+      is_deleted: newTournament.isDeleted,
+      scope: newTournament.scope,
+      city: newTournament.city
     };
 
     supabase.from('tournaments').insert(dbTournament).then(({ error }) => {
@@ -1784,15 +1799,47 @@ const App: React.FC = () => {
               </h2>
               <p className="opacity-90 mb-6 text-emerald-100 font-medium">{ROLE_DESCRIPTIONS[currentUser.role]}</p>
 
-              {currentUser.teamId && (
-                <div className="mb-6 bg-white/10 p-4 rounded-2xl backdrop-blur-md border border-white/20 hover:bg-white/20 transition-colors cursor-pointer interactive-card">
-                  <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">Seu Time</span>
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className="w-4 h-4 rounded-full bg-white shadow-sm"></span>
-                    <span className="font-bold text-xl">{getTeam(currentUser.teamId).name}</span>
-                  </div>
-                </div>
-              )}
+              {/* DASHBOARD TEAM SELECTOR */}
+              {(() => {
+                const allUserTeams = activeTeams.filter(t =>
+                  t.id === currentUser.teamId ||
+                  t.roster.some(p => p.userId === currentUser.id)
+                );
+
+                // If there are teams, show the Dashboard Card
+                if (allUserTeams.length > 0) {
+                  const activeDashboardTeamId = dashboardTeamId || allUserTeams[0].id; // Fallback
+                  const activeDashboardTeam = allUserTeams.find(t => t.id === activeDashboardTeamId) || allUserTeams[0];
+
+                  return (
+                    <div className="mb-6 bg-white/10 p-4 rounded-2xl backdrop-blur-md border border-white/20 hover:bg-white/20 transition-colors cursor-pointer interactive-card relative group">
+                      <div className="flex justify-between items-start">
+                        <span className="text-[10px] font-bold uppercase tracking-wider opacity-70">Seu Time</span>
+                        {allUserTeams.length > 1 && (
+                          <div className="relative pointer-events-auto" onClick={(e) => e.stopPropagation()}>
+                            <select
+                              value={activeDashboardTeam.id}
+                              onChange={(e) => setDashboardTeamId(e.target.value)}
+                              className="appearance-none bg-black/20 text-white border border-white/20 text-xs font-bold px-3 py-1 pr-8 rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-400 cursor-pointer hover:bg-black/30 transition"
+                            >
+                              {allUserTeams.map(t => <option key={t.id} value={t.id} className="text-slate-900 bg-white">{t.name}</option>)}
+                            </select>
+                            <ChevronDown size={14} className="absolute right-2 top-1.5 text-white/70 pointer-events-none" />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3 mt-2" onClick={() => handleTeamClick(activeDashboardTeam.id)}>
+                        <div className="w-8 h-8 rounded-full shadow-lg flex items-center justify-center text-xs font-bold text-white border-2 border-white/30" style={{ backgroundColor: activeDashboardTeam.logoColor || '#10b981' }}>
+                          {activeDashboardTeam.shortName}
+                        </div>
+                        <span className="font-bold text-xl truncate">{activeDashboardTeam.name}</span>
+                      </div>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
 
               <div className="flex gap-4">
                 <button onClick={() => changeView('MATCHES')} className="btn-feedback bg-white text-emerald-900 px-6 py-3 rounded-xl font-bold shadow-lg shadow-black/10 text-sm">
@@ -2725,8 +2772,100 @@ const App: React.FC = () => {
       );
     }
 
+    // Filter Logic
+    const myTournaments = activeTournaments.filter(t =>
+      t.createdBy === currentUser?.id ||
+      (currentUser?.teamId && t.participatingTeamIds.includes(currentUser.teamId))
+    );
+
+    const otherTournaments = activeTournaments.filter(t => !myTournaments.find(mt => mt.id === t.id));
+
+    const exploreTournaments = otherTournaments.filter(t => {
+      // If legacy (no scope), show it
+      if (!t.scope) return true;
+
+      // Private: Hide unless invited (which would be in 'myTournaments' if accepted)
+      if (t.scope === 'PARTICULAR') return false;
+
+      if (t.scope === 'NACIONAL') return true;
+
+      const userLocation = currentUser?.location || '';
+      const [userCity, userState] = userLocation.includes(' - ') ? userLocation.split(' - ') : [userLocation, ''];
+
+      const tourLocation = t.city || '';
+      const [tourCity, tourState] = tourLocation.includes(' - ') ? tourLocation.split(' - ') : [tourLocation, ''];
+
+      if (t.scope === 'ESTADUAL') {
+        return userState && tourState && userState === tourState;
+      }
+
+      if (t.scope === 'MUNICIPAL') {
+        return userCity && tourCity && userCity === tourCity;
+      }
+
+      return true;
+    });
+
+    const renderTournamentCard = (tour: Tournament) => {
+      const isCreator = tour.createdBy === currentUser!.id;
+      return (
+        <div
+          key={tour.id}
+          onClick={() => setSelectedTournamentId(tour.id)}
+          className="glass-panel p-6 rounded-3xl hover:shadow-2xl transition-all duration-300 transform cursor-pointer group relative overflow-hidden interactive-card"
+        >
+          <div className="absolute -right-4 -top-4 w-32 h-32 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full blur-2xl opacity-20 group-hover:opacity-30 transition"></div>
+          <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition group-hover:scale-110 duration-500">
+            <Trophy size={80} />
+          </div>
+
+          <div className="relative z-10">
+            <div className="flex gap-2 mb-4">
+              <span className="text-[10px] font-bold text-white uppercase tracking-wide bg-gradient-to-r from-emerald-500 to-teal-500 px-2 py-1 rounded shadow-sm">
+                {tour.format === 'LEAGUE' ? 'Liga' : 'Mata-Mata'}
+              </span>
+              <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide ${tour.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                {tour.status === 'ACTIVE' ? 'Ativo' : 'Encerrado'}
+              </span>
+              {tour.scope && (
+                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded uppercase tracking-wide">
+                  {tour.scope}
+                </span>
+              )}
+            </div>
+
+            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2 leading-tight group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">{tour.name}</h3>
+            <div className="flex justify-between items-end mt-4">
+              <div className="text-sm text-slate-500 font-medium bg-white/50 px-2 py-1 rounded-lg">
+                {SPORT_TYPE_DETAILS[tour.sportType]?.label}
+              </div>
+              {isCreator && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); openDeleteModal(tour.id, 'TOURNAMENT'); }}
+                  className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition btn-feedback"
+                  title="Excluir"
+                >
+                  <Trash2 size={16} />
+                </button>
+              )}
+            </div>
+
+            <div className="mt-6">
+              <div className="flex justify-between text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">
+                <span>Progresso</span>
+                <span>{(tour.currentRound / tour.totalRounds * 100).toFixed(0)}%</span>
+              </div>
+              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${(tour.currentRound / tour.totalRounds) * 100}%` }}></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
     return (
-      <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="space-y-12 animate-in fade-in duration-500">
         <div className="flex justify-between items-center">
           <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Campeonatos</h2>
           {canManage && (
@@ -2738,72 +2877,31 @@ const App: React.FC = () => {
             </button>
           )}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {[...activeTournaments]
-            .sort((a, b) => {
-              const myCity = (currentUser!.location || '').split(' - ')[0];
-              const aIsLocal = a.city && a.city.includes(myCity);
-              const bIsLocal = b.city && b.city.includes(myCity);
-              if (aIsLocal && !bIsLocal) return -1;
-              if (!aIsLocal && bIsLocal) return 1;
-              return 0;
-            })
-            .map(tour => {
-              const isCreator = tour.createdBy === currentUser!.id;
-              return (
-                <div
-                  key={tour.id}
-                  onClick={() => setSelectedTournamentId(tour.id)}
-                  className="glass-panel p-6 rounded-3xl hover:shadow-2xl transition-all duration-300 transform cursor-pointer group relative overflow-hidden interactive-card"
-                >
-                  <div className="absolute -right-4 -top-4 w-32 h-32 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full blur-2xl opacity-20 group-hover:opacity-30 transition"></div>
-                  <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition group-hover:scale-110 duration-500">
-                    <Trophy size={80} />
-                  </div>
+        {/* SECTION 1: MY TOURNAMENTS */}
+        {myTournaments.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white border-l-4 border-emerald-500 pl-3">Meus Campeonatos (Participando/Criado)</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {myTournaments.map(renderTournamentCard)}
+            </div>
+          </div>
+        )}
 
-                  <div className="relative z-10">
-                    <div className="flex gap-2 mb-4">
-                      <span className="text-[10px] font-bold text-white uppercase tracking-wide bg-gradient-to-r from-emerald-500 to-teal-500 px-2 py-1 rounded shadow-sm">
-                        {tour.format === 'LEAGUE' ? 'Liga' : 'Mata-Mata'}
-                      </span>
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide ${tour.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
-                        {tour.status === 'ACTIVE' ? 'Ativo' : 'Encerrado'}
-                      </span>
-                    </div>
+        {/* SECTION 2: EXPLORE */}
+        <div className="space-y-4">
+          <div className="flex items-center gap-3">
+            <h3 className="text-xl font-bold text-slate-800 dark:text-white border-l-4 border-blue-500 pl-3">Explorar Campeonatos</h3>
+          </div>
 
-                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2 leading-tight group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">{tour.name}</h3>
-                    <div className="flex justify-between items-end mt-4">
-                      <div className="text-sm text-slate-500 font-medium bg-white/50 px-2 py-1 rounded-lg">
-                        {SPORT_TYPE_DETAILS[tour.sportType]?.label}
-                      </div>
-                      {isCreator && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); openDeleteModal(tour.id, 'TOURNAMENT'); }}
-                          className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition btn-feedback"
-                          title="Excluir"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-
-                    <div className="mt-6">
-                      <div className="flex justify-between text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                        <span>Progresso</span>
-                        <span>{(tour.currentRound / tour.totalRounds * 100).toFixed(0)}%</span>
-                      </div>
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${(tour.currentRound / tour.totalRounds) * 100}%` }}></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          {activeTournaments.length === 0 && (
+          {exploreTournaments.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {exploreTournaments.map(renderTournamentCard)}
+            </div>
+          ) : (
             <div className="col-span-full py-20 text-center text-slate-400 glass-panel rounded-3xl border-dashed border-2 border-slate-200 interactive-card">
               <Trophy size={48} className="mx-auto text-slate-300 mb-2 opacity-50" />
-              Nenhum campeonato ativo no momento.
+              <p>Nenhum campeonato encontrado na sua região.</p>
+              <p className="text-xs mt-2 text-slate-500">({currentUser?.location || 'Localização desconhecida'})</p>
             </div>
           )}
         </div>
@@ -3288,32 +3386,49 @@ const App: React.FC = () => {
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Campeonato</label>
                   <input type="text" name="name" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="Copa de Verão 2024" />
                 </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Formato</label>
+                  <select name="format" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <option value="LEAGUE">Pontos Corridos</option>
+                    <option value="KNOCKOUT">Mata-Mata</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Esporte</label>
+                  <select name="sportType" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <option value="FUT7">Futebol Society (7)</option>
+                    <option value="FUTSAL">Futsal (5)</option>
+                    <option value="FUT6">Fut 6</option>
+                    <option value="AMATEUR">Campo (11) Amador</option>
+                    <option value="PROFESSIONAL">Campo (11) Profissional</option>
+                  </select>
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Formato</label>
-                    <select name="format" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
-                      <option value="LEAGUE">Pontos Corridos</option>
-                      <option value="KNOCKOUT">Mata-Mata</option>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Abrangência</label>
+                    <select name="scope" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-500">
+                      <option value="PARTICULAR">Particular</option>
+                      <option value="MUNICIPAL">Municipal</option>
+                      <option value="ESTADUAL">Estadual</option>
+                      <option value="NACIONAL">Nacional</option>
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Esporte</label>
-                    <select name="sportType" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
-                      {Object.entries(SPORT_TYPE_DETAILS).map(([key, val]) => (
-                        <option key={key} value={key}>{val.label}</option>
-                      ))}
-                    </select>
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cidade Sede</label>
+                    <CitySelect name="city" required />
                   </div>
                 </div>
+
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Número de Times</label>
                   <input type="number" name="maxTeams" defaultValue={8} min={2} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required />
                   <p className="text-[10px] text-slate-400 mt-1">Rodadas e chaves serão calculadas automaticamente.</p>
                 </div>
                 <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 mt-2">Criar Campeonato</button>
-              </form>
-            </div>
-          </div>
+              </form >
+            </div >
+          </div >
         )
       }
 
@@ -3400,48 +3515,50 @@ const App: React.FC = () => {
       */}
 
       {/* 6. EVALUATION MODAL */}
-      {isEvaluationModalOpen && selectedPlayerForEvaluation && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="glass-panel text-slate-900 mx-auto w-full max-w-md rounded-3xl p-8 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <h2 className="text-2xl font-black">Avaliar Atleta</h2>
-                <p className="text-sm text-slate-500 font-bold">{selectedPlayerForEvaluation.player.name}</p>
+      {
+        isEvaluationModalOpen && selectedPlayerForEvaluation && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+            <div className="glass-panel text-slate-900 mx-auto w-full max-w-md rounded-3xl p-8 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h2 className="text-2xl font-black">Avaliar Atleta</h2>
+                  <p className="text-sm text-slate-500 font-bold">{selectedPlayerForEvaluation.player.name}</p>
+                </div>
+                <button onClick={() => setIsEvaluationModalOpen(false)}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
               </div>
-              <button onClick={() => setIsEvaluationModalOpen(false)}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
+              <form onSubmit={handleSaveEvaluation} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nota Geral (0-10)</label>
+                  <input type="number" name="rating" min="0" max="10" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-center text-xl" required />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Técnica</label>
+                    <input type="number" name="technicalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tática</label>
+                    <input type="number" name="tacticalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Físico</label>
+                    <input type="number" name="physicalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mental</label>
+                    <input type="number" name="mentalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Comentários / Feedback</label>
+                  <textarea name="comments" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 h-24 resize-none" placeholder="Pontos fortes, pontos a melhorar..."></textarea>
+                </div>
+                <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 mt-2">Salvar Avaliação</button>
+              </form>
             </div>
-            <form onSubmit={handleSaveEvaluation} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nota Geral (0-10)</label>
-                <input type="number" name="rating" min="0" max="10" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-center text-xl" required />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Técnica</label>
-                  <input type="number" name="technicalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tática</label>
-                  <input type="number" name="tacticalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Físico</label>
-                  <input type="number" name="physicalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mental</label>
-                  <input type="number" name="mentalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Comentários / Feedback</label>
-                <textarea name="comments" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 h-24 resize-none" placeholder="Pontos fortes, pontos a melhorar..."></textarea>
-              </div>
-              <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 mt-2">Salvar Avaliação</button>
-            </form>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* GLOBAL DELETE CONFIRMATION MODAL */}
       {
