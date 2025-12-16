@@ -1709,25 +1709,8 @@ const App: React.FC = () => {
   if (isLoading) return <PageTransition />;
 
   // PROFILE VIEW (Replaces other views if set)
-  if (viewingProfileId) {
-    const profileUser = userAccounts.find(u => u.id === viewingProfileId);
-
-    if (!profileUser) return <div>Usuário não encontrado</div>;
-
-    return (
-      <UserProfileView
-        viewingUser={profileUser}
-        currentUser={currentUser}
-        teams={teams}
-        socialGraph={socialGraph}
-        onClose={() => setViewingProfileId(null)}
-        onUpdateProfile={handleUpdateProfile}
-        onFollow={handleFollow}
-        onTeamClick={handleTeamClick}
-        onDeleteUser={(id) => openDeleteModal(id, 'USER')}
-      />
-    );
-  }
+  // PROFILE VIEW (Replaces other views if set) - REMOVED to allow Modal behavior
+  // if (viewingProfileId) { ... }
 
   if (selectedMatchId && selectedMatch) {
     return (
@@ -1830,7 +1813,7 @@ const App: React.FC = () => {
           {/* REFEREE INSIGHTS */}
           {currentUser.role === UserRole.REFEREE && (
             <div className="space-y-4">
-              <h3 className="text-lg font-bold flex items-center gap-2 text-slate-800">
+              <h3 className="text-lg font-bold flex items-center gap-2 text-slate-800 dark:text-white">
                 <Shield className="text-purple-600 icon-hover" size={20} />
                 Jogos Atribuídos & Insights
               </h3>
@@ -1866,7 +1849,7 @@ const App: React.FC = () => {
           {currentUser.role !== UserRole.REFEREE && (
             <div className="space-y-4">
               <div className="flex justify-between items-center px-1">
-                <h3 className="text-xl font-bold flex items-center gap-2 text-slate-800">
+                <h3 className="text-xl font-bold flex items-center gap-2 text-slate-800 dark:text-white">
                   <Calendar className="text-emerald-500 icon-hover" size={24} />
                   {currentUser.role === UserRole.FAN && currentUser.teamId ? 'Próximo Jogo' : 'Destaque'}
                 </h3>
@@ -2440,7 +2423,7 @@ const App: React.FC = () => {
     // --- Render Helper ---
     const renderTeamSection = (title: string, teamList: Team[], Icon: React.ElementType, emptyMsg: string) => (
       <div className="space-y-4">
-        <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 pl-2 border-l-4 border-emerald-500">
+        <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2 pl-2 border-l-4 border-emerald-500">
           <Icon size={20} className="text-emerald-500" /> {title}
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2501,7 +2484,7 @@ const App: React.FC = () => {
     return (
       <div className="space-y-12 animate-in fade-in duration-500">
         <div className="flex justify-between items-center">
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Times</h2>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Times</h2>
           {currentUser!.role === UserRole.DIRECTOR && (
             <button
               onClick={() => setIsTeamModalOpen(true)}
@@ -2572,7 +2555,7 @@ const App: React.FC = () => {
 
         {/* Header & Filters */}
         <div className="flex flex-col gap-6">
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Jogos & Resultados</h2>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Jogos & Resultados</h2>
 
           {/* ROW 1: Context Filters (Tournaments/Friendly) */}
           {activeTournaments.length > 0 && (
@@ -2643,7 +2626,7 @@ const App: React.FC = () => {
         {
           myMatches.length > 0 && (
             <div className="space-y-4">
-              <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2 pl-2 border-l-4 border-emerald-500">
+              <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2 pl-2 border-l-4 border-emerald-500">
                 {currentUser!.role === UserRole.REFEREE ? 'Seus Jogos Atribuídos' : 'Seus Jogos & Times Seguidos'}
               </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2745,7 +2728,7 @@ const App: React.FC = () => {
     return (
       <div className="space-y-8 animate-in fade-in duration-500">
         <div className="flex justify-between items-center">
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Campeonatos</h2>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Campeonatos</h2>
           {canManage && (
             <button
               onClick={() => setIsTournamentModalOpen(true)}
@@ -2788,7 +2771,7 @@ const App: React.FC = () => {
                       </span>
                     </div>
 
-                    <h3 className="text-2xl font-bold text-slate-900 mb-2 leading-tight group-hover:text-emerald-700 transition-colors">{tour.name}</h3>
+                    <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2 leading-tight group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">{tour.name}</h3>
                     <div className="flex justify-between items-end mt-4">
                       <div className="text-sm text-slate-500 font-medium bg-white/50 px-2 py-1 rounded-lg">
                         {SPORT_TYPE_DETAILS[tour.sportType]?.label}
@@ -2944,7 +2927,7 @@ const App: React.FC = () => {
   // --- Main Render ---
 
   return (
-    <div className="min-h-screen font-sans relative bg-slate-50 text-slate-800">
+    <div className="min-h-screen font-sans relative bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300">
       {/* Navbar */}
       {currentUser && (
         <nav className="glass-panel-dark text-white sticky top-4 z-40 mx-4 rounded-2xl mb-6 shadow-2xl backdrop-blur-xl">
@@ -3073,14 +3056,7 @@ const App: React.FC = () => {
               </button>
             );
           })}
-          <button
-            onClick={toggleTheme}
-            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-300 w-16 btn-feedback ${theme === 'dark' ? 'text-amber-400 bg-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
-          >
-            {theme === 'dark' ? <Trophy size={20} className="fill-current" /> : <Shield size={20} />}
-            {/* Using existing icons because Moon/Sun not imported. Will stick to text or reuse icons. */}
-            <span className="text-[10px] font-bold">{theme === 'dark' ? 'Dark' : 'Light'}</span>
-          </button>
+
 
           <button
             onClick={() => setViewingProfileId(currentUser.id)}
@@ -3404,6 +3380,8 @@ const App: React.FC = () => {
               }}
               onUploadImage={uploadImage}
               onTogglePlayerRole={handleTogglePlayerRole}
+              theme={theme}
+              toggleTheme={toggleTheme}
             />
           </div>
         )

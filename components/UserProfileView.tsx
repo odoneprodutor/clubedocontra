@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserAccount, UserRole, Team, CurrentUser, PlayerStats, SocialConnection } from '../types';
 import {
-   Camera, Edit2, MapPin, Calendar, Mail, Shield, Crown, Save, X, Activity, Heart, ArrowLeft, Lock, AlertTriangle
+   Camera, Edit2, MapPin, Calendar, Mail, Shield, Crown, Save, X, Activity, Heart, ArrowLeft, Lock, AlertTriangle, Moon, Sun
 } from 'lucide-react';
 import { ROLE_DESCRIPTIONS } from '../constants';
 
@@ -18,10 +18,12 @@ interface UserProfileViewProps {
    onDeleteUser?: (userId: string) => void;
    onUploadImage: (file: File) => Promise<string | null>;
    onTogglePlayerRole?: (userId: string, teamId: string, shouldBePlayer: boolean) => void;
+   theme: string;
+   toggleTheme: () => void;
 }
 
 const UserProfileView: React.FC<UserProfileViewProps> = ({
-   viewingUser, currentUser, teams, socialGraph, onClose, onUpdateProfile, onFollow, onTeamClick, onDeleteUser, onUploadImage, onTogglePlayerRole
+   viewingUser, currentUser, teams, socialGraph, onClose, onUpdateProfile, onFollow, onTeamClick, onDeleteUser, onUploadImage, onTogglePlayerRole, theme, toggleTheme
 }) => {
    const isSelf = currentUser.id === viewingUser.id;
    const isFollowing = socialGraph.some(s => s.followerId === currentUser.id && s.targetId === viewingUser.id);
@@ -100,7 +102,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
             <ArrowLeft size={16} /> Voltar
          </button>
 
-         <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden relative">
+         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden relative transition-colors duration-300">
 
             {/* COVER PHOTO */}
             <div className="h-48 md:h-64 bg-slate-200 relative group">
@@ -172,7 +174,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                               <select
                                  value={formData.role}
                                  onChange={(e) => handleChange('role', e.target.value)}
-                                 className="text-sm border rounded p-1 font-medium text-slate-600 bg-slate-50"
+                                 className="text-sm border rounded p-1 font-medium text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
                               >
                                  <option value={UserRole.FAN}>Torcedor</option>
                                  <option value={UserRole.PLAYER}>Jogador</option>
@@ -188,7 +190,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                            </div>
                         ) : (
                            <>
-                              <h1 className="text-3xl font-bold text-slate-900 flex items-center justify-center md:justify-start gap-2">
+                              <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center justify-center md:justify-start gap-2">
                                  {viewingUser.name}
                                  {viewingUser.role === UserRole.DIRECTOR && <Crown size={20} className="text-amber-500" />}
                                  {viewingUser.role === UserRole.REFEREE && <Shield size={20} className="text-purple-500" />}
@@ -226,7 +228,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                               </button>
                            </>
                         ) : (
-                           <button onClick={() => setIsEditing(true)} className="px-6 py-2 rounded-lg text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 font-bold text-sm transition flex items-center gap-2 shadow-sm">
+                           <button onClick={() => setIsEditing(true)} className="px-6 py-2 rounded-lg text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 font-bold text-sm transition flex items-center gap-2 shadow-sm">
                               <Edit2 size={16} /> Editar Perfil
                            </button>
                         )
@@ -259,8 +261,8 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                   <div className="md:col-span-2 space-y-8">
 
                      {/* BIO SECTION */}
-                     <div className="bg-slate-50 p-6 rounded-xl border border-slate-100">
-                        <h3 className="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wide">Sobre</h3>
+                     <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-xl border border-slate-100 dark:border-slate-700">
+                        <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 text-sm uppercase tracking-wide">Sobre</h3>
                         {isEditing ? (
                            <textarea
                               value={formData.bio}
@@ -270,7 +272,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                               placeholder="Conte um pouco sobre você..."
                            />
                         ) : (
-                           <p className="text-slate-600 text-sm leading-relaxed">
+                           <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed">
                               {viewingUser.bio || <span className="italic text-slate-400">Este usuário ainda não escreveu uma bio.</span>}
                            </p>
                         )}
@@ -349,9 +351,30 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                   {/* RIGHT COL: SIDEBAR */}
                   <div className="space-y-6">
 
+                     {/* SETTINGS CARD (Theme) - Only for Self */}
+                     {isSelf && (
+                        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden transition-colors duration-300">
+                           <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 text-sm uppercase tracking-wide flex items-center gap-2">
+                              Configurações
+                           </h3>
+                           <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                                 {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
+                                 Modo Escuro
+                              </span>
+                              <button
+                                 onClick={toggleTheme}
+                                 className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 relative ${theme === 'dark' ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                              >
+                                 <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform duration-300 ${theme === 'dark' ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                              </button>
+                           </div>
+                        </div>
+                     )}
+
                      {/* TEAM CARD */}
                      <div>
-                        <h3 className="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wide">
+                        <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 text-sm uppercase tracking-wide">
                            {viewingUser.role === UserRole.FAN ? 'Time do Coração' : 'Vínculo Oficial'}
                         </h3>
 
@@ -368,7 +391,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                            </select>
                         ) : (
                            linkedTeam ? (
-                              <div onClick={() => onTeamClick(linkedTeam.id)} className="group bg-white p-4 rounded-xl border border-slate-200 shadow-sm hover:shadow-md hover:border-emerald-400 transition cursor-pointer relative overflow-hidden">
+                              <div onClick={() => onTeamClick(linkedTeam.id)} className="group bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md hover:border-emerald-400 transition cursor-pointer relative overflow-hidden">
                                  <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition">
                                     <Crown size={48} />
                                  </div>
@@ -377,8 +400,8 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                                        {linkedTeam.shortName}
                                     </div>
                                     <div>
-                                       <div className="font-bold text-slate-900 group-hover:text-emerald-600 transition">{linkedTeam.name}</div>
-                                       <div className="text-xs text-slate-500">{linkedTeam.city}</div>
+                                       <div className="font-bold text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition">{linkedTeam.name}</div>
+                                       <div className="text-xs text-slate-500 dark:text-slate-400">{linkedTeam.city}</div>
                                     </div>
                                  </div>
                               </div>
@@ -396,16 +419,16 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                      </div>
 
                      {/* SOCIAL STATS */}
-                     <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                        <h3 className="font-bold text-slate-800 mb-3 text-sm uppercase tracking-wide">Comunidade</h3>
+                     <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                        <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 text-sm uppercase tracking-wide">Comunidade</h3>
                         <div className="grid grid-cols-2 gap-4">
                            <div className="text-center">
-                              <div className="text-xl font-bold text-slate-900">{socialGraph.filter(s => s.targetId === viewingUser.id).length}</div>
-                              <div className="text-[10px] text-slate-500 uppercase font-bold">Seguidores</div>
+                              <div className="text-xl font-bold text-slate-900 dark:text-white">{socialGraph.filter(s => s.targetId === viewingUser.id).length}</div>
+                              <div className="text-[10px] text-slate-500 dark:text-slate-300 uppercase font-bold">Seguidores</div>
                            </div>
                            <div className="text-center">
-                              <div className="text-xl font-bold text-slate-900">{socialGraph.filter(s => s.followerId === viewingUser.id).length}</div>
-                              <div className="text-[10px] text-slate-500 uppercase font-bold">Seguindo</div>
+                              <div className="text-xl font-bold text-slate-900 dark:text-white">{socialGraph.filter(s => s.followerId === viewingUser.id).length}</div>
+                              <div className="text-[10px] text-slate-500 dark:text-slate-300 uppercase font-bold">Seguindo</div>
                            </div>
                         </div>
                      </div>
@@ -414,7 +437,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                </div>
             </div>
          </div>
-      </div>
+      </div >
    );
 };
 
