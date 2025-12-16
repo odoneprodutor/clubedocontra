@@ -17,6 +17,10 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     this.state = { hasError: false, error: null };
   }
 
+  // Explicitly declare props for TS
+  props: ErrorBoundaryProps;
+
+
   state: ErrorBoundaryState = {
     hasError: false,
     error: null

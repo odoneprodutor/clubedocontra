@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import {
-  UserRole, Team, Match, Arena, MatchStatus, MatchType, AppView, Tournament, MatchEventType, Player, TacticalPosition, ChatMessage, CurrentUser, Notification, SocialConnection, UserAccount, PlayerStats, SportType, MatchMedia
+  UserRole, Team, Match, Arena, MatchStatus, MatchType, AppView, Tournament, MatchEventType, Player, TacticalPosition, ChatMessage, CurrentUser, Notification, SocialConnection, UserAccount, PlayerStats, SportType, MatchMedia, PlayerEvaluation
 } from './types';
 import {
   INITIAL_ARENAS, INITIAL_MATCHES, INITIAL_TEAMS, INITIAL_TOURNAMENTS, MOCK_NEWS, ROLE_DESCRIPTIONS, DEFAULT_DIRECTOR_ID, INITIAL_NOTIFICATIONS, INITIAL_SOCIAL, MOCK_USERS, SAFE_TEAM, SPORT_TYPE_DETAILS
@@ -87,6 +87,110 @@ const uploadImage = async (file: File): Promise<string | null> => {
     alert('Erro ao fazer upload da imagem. Tente novamente.');
     return null;
   }
+};
+
+// --- HELPER: Location Hook (IBGE API) ---
+const useLocationData = () => {
+  const [states, setStates] = useState<{ id: number; sigla: string; nome: string }[]>([]);
+  const [cities, setCities] = useState<{ id: number; nome: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch('https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome')
+      .then(res => res.json())
+      .then(data => setStates(data))
+      .catch(err => console.error("Error fetching states:", err));
+  }, []);
+
+  const fetchCitiesForState = async (uf: string) => {
+    if (!uf) { setCities([]); return; }
+    setLoading(true);
+    try {
+      const res = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios?orderBy=nome`);
+      const data = await res.json();
+      setCities(data);
+    } catch (err) {
+      console.error("Error fetching cities:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return { states, cities, fetchCitiesForState, loading };
+};
+
+// --- COMPONENT: City Select ---
+interface CitySelectProps {
+  value?: string;
+  onChange: (value: string) => void;
+  className?: string;
+  required?: boolean;
+  name?: string;
+}
+
+const CitySelect: React.FC<CitySelectProps> = ({ value, onChange, className, required, name }) => {
+  const { states, cities, fetchCitiesForState, loading } = useLocationData();
+  const [selectedState, setSelectedState] = useState('');
+  const [selectedCity, setSelectedCity] = useState('');
+
+  // Parse initial value (Format: "City - UF" or just "City")
+  useEffect(() => {
+    if (value && value.includes(' - ')) {
+      const [c, s] = value.split(' - ');
+      if (s !== selectedState) {
+        setSelectedState(s);
+        fetchCitiesForState(s);
+      }
+      setSelectedCity(c);
+    }
+  }, [value]); // careful with dependency loop
+
+  const handleStateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const uf = e.target.value;
+    setSelectedState(uf);
+    setSelectedCity('');
+    onChange(''); // clear
+    fetchCitiesForState(uf);
+  };
+
+  const handleCityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const city = e.target.value;
+    setSelectedCity(city);
+    if (city && selectedState) {
+      onChange(`${city} - ${selectedState}`);
+    } else {
+      onChange(city);
+    }
+  };
+
+  return (
+    <div className={`grid grid-cols-3 gap-2 ${className}`}>
+      <input type="hidden" name={name} value={selectedCity && selectedState ? `${selectedCity} - ${selectedState}` : ''} />
+      <div className="col-span-1">
+        <select
+          className="w-full p-3 bg-slate-50 dark:bg-slate-800 dark:border-slate-700 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition"
+          value={selectedState}
+          onChange={handleStateChange}
+          required={required}
+        >
+          <option value="">UF</option>
+          {states.map(s => <option key={s.id} value={s.sigla}>{s.sigla}</option>)}
+        </select>
+      </div>
+      <div className="col-span-2 relative">
+        <select
+          className="w-full p-3 bg-slate-50 dark:bg-slate-800 dark:border-slate-700 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition disabled:opacity-50"
+          value={selectedCity}
+          onChange={handleCityChange}
+          required={required}
+          disabled={!selectedState || loading}
+        >
+          <option value="">{loading ? 'Carregando...' : 'Selecione a Cidade'}</option>
+          {cities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
+        </select>
+      </div>
+    </div>
+  );
 };
 
 // --- Login & Registration Screen Component ---
@@ -269,15 +373,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin, onRegi
                 <>
                   <div>
                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Sua Cidade</label>
-                    <div className="relative group">
-                      <MapPin className="absolute left-3 top-3 text-slate-400 group-hover:text-emerald-500 transition-colors" size={18} />
-                      <input
-                        type="text"
-                        value={location}
-                        onChange={(e) => setLocation(e.target.value)}
-                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all text-sm shadow-inner input-focus-effect"
-                        placeholder="Ex: São Paulo, SP"
-                      />
+                    <div className="relative group p-1 bg-slate-50 border border-slate-200 rounded-xl">
+                      <CitySelect value={location} onChange={setLocation} />
                     </div>
                   </div>
 
@@ -393,6 +490,19 @@ const usePersistentState = <T,>(key: string, initialValue: T) => {
 };
 
 const App: React.FC = () => {
+  // --- Dark Mode ---
+  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+  useEffect(() => {
+    const root = window.document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
+
   // --- Global State ---
   // --- GLOBAL STATE ---
   // Replaced usePersistentState with useState + Supabase Fetch
@@ -463,6 +573,42 @@ const App: React.FC = () => {
   }, []);
 
 
+
+
+  // --- Player Evaluation State ---
+  const [isEvaluationModalOpen, setIsEvaluationModalOpen] = useState(false);
+  const [selectedPlayerForEvaluation, setSelectedPlayerForEvaluation] = useState<{ player: Player, teamId: string } | null>(null);
+
+  // --- HANDLERS ---
+  const handleSaveEvaluation = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedPlayerForEvaluation || !currentUser) return;
+    const formData = new FormData(event.currentTarget);
+
+    // Evaluation Object
+    const newEval = {
+      id: generateUUID(),
+      player_id: selectedPlayerForEvaluation.player.id,
+      evaluator_id: currentUser.id,
+      rating: Number(formData.get('rating')),
+      technical_score: Number(formData.get('technicalScore')),
+      tactical_score: Number(formData.get('tacticalScore')),
+      physical_score: Number(formData.get('physicalScore')),
+      mental_score: Number(formData.get('mentalScore')),
+      comments: formData.get('comments') as string
+    };
+
+    const { error } = await supabase.from('player_evaluations').insert(newEval);
+
+    if (error) {
+      console.error("Error saving evaluation:", error);
+      alert("Erro ao salvar avaliação (Banco de dados pode estar desatualizado).");
+    } else {
+      alert("Avaliação salva com sucesso!");
+    }
+    setIsEvaluationModalOpen(false);
+    setSelectedPlayerForEvaluation(null);
+  };
 
   // Navigation / UI State
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null);
@@ -1297,6 +1443,7 @@ const App: React.FC = () => {
     // Images
     const profileFile = formData.get('profilePicture') as File;
     const coverFile = formData.get('coverPicture') as File;
+    const city = formData.get('city') as string; // Read City
 
     let profileUrl = '';
     if (profileFile && profileFile.size > 0) {
@@ -1318,13 +1465,15 @@ const App: React.FC = () => {
       lng: 0,
       googleMapsUrl: formData.get('googleMapsUrl') as string,
       profilePicture: profileUrl,
-      coverPicture: coverUrl
+      coverPicture: coverUrl,
+      city: city // Add to object
     };
 
     const dbArena = {
       id: newArena.id,
       name: newArena.name,
       address: newArena.address,
+      city: newArena.city, // Add to DB object
       lat: newArena.lat,
       lng: newArena.lng,
       google_maps_url: newArena.googleMapsUrl,
@@ -2247,6 +2396,15 @@ const App: React.FC = () => {
                                 <Trash2 size={16} />
                               </button>
                             )}
+                            {isEditable && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setSelectedPlayerForEvaluation({ player: p, teamId: myTeam.id }); setIsEvaluationModalOpen(true); }}
+                                className="p-1.5 text-slate-300 hover:bg-emerald-50 hover:text-emerald-500 rounded-lg transition opacity-0 group-hover:opacity-100"
+                                title="Avaliar Jogador"
+                              >
+                                <Activity size={16} />
+                              </button>
+                            )}
                           </div>
                         </div>
                       ))}
@@ -2598,58 +2756,67 @@ const App: React.FC = () => {
           )}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {activeTournaments.map(tour => {
-            const isCreator = tour.createdBy === currentUser!.id;
-            return (
-              <div
-                key={tour.id}
-                onClick={() => setSelectedTournamentId(tour.id)}
-                className="glass-panel p-6 rounded-3xl hover:shadow-2xl transition-all duration-300 transform cursor-pointer group relative overflow-hidden interactive-card"
-              >
-                <div className="absolute -right-4 -top-4 w-32 h-32 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full blur-2xl opacity-20 group-hover:opacity-30 transition"></div>
-                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition group-hover:scale-110 duration-500">
-                  <Trophy size={80} />
+          {[...activeTournaments]
+            .sort((a, b) => {
+              const myCity = (currentUser!.location || '').split(' - ')[0];
+              const aIsLocal = a.city && a.city.includes(myCity);
+              const bIsLocal = b.city && b.city.includes(myCity);
+              if (aIsLocal && !bIsLocal) return -1;
+              if (!aIsLocal && bIsLocal) return 1;
+              return 0;
+            })
+            .map(tour => {
+              const isCreator = tour.createdBy === currentUser!.id;
+              return (
+                <div
+                  key={tour.id}
+                  onClick={() => setSelectedTournamentId(tour.id)}
+                  className="glass-panel p-6 rounded-3xl hover:shadow-2xl transition-all duration-300 transform cursor-pointer group relative overflow-hidden interactive-card"
+                >
+                  <div className="absolute -right-4 -top-4 w-32 h-32 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full blur-2xl opacity-20 group-hover:opacity-30 transition"></div>
+                  <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition group-hover:scale-110 duration-500">
+                    <Trophy size={80} />
+                  </div>
+
+                  <div className="relative z-10">
+                    <div className="flex gap-2 mb-4">
+                      <span className="text-[10px] font-bold text-white uppercase tracking-wide bg-gradient-to-r from-emerald-500 to-teal-500 px-2 py-1 rounded shadow-sm">
+                        {tour.format === 'LEAGUE' ? 'Liga' : 'Mata-Mata'}
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide ${tour.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+                        {tour.status === 'ACTIVE' ? 'Ativo' : 'Encerrado'}
+                      </span>
+                    </div>
+
+                    <h3 className="text-2xl font-bold text-slate-900 mb-2 leading-tight group-hover:text-emerald-700 transition-colors">{tour.name}</h3>
+                    <div className="flex justify-between items-end mt-4">
+                      <div className="text-sm text-slate-500 font-medium bg-white/50 px-2 py-1 rounded-lg">
+                        {SPORT_TYPE_DETAILS[tour.sportType]?.label}
+                      </div>
+                      {isCreator && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openDeleteModal(tour.id, 'TOURNAMENT'); }}
+                          className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition btn-feedback"
+                          title="Excluir"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="mt-6">
+                      <div className="flex justify-between text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">
+                        <span>Progresso</span>
+                        <span>{(tour.currentRound / tour.totalRounds * 100).toFixed(0)}%</span>
+                      </div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${(tour.currentRound / tour.totalRounds) * 100}%` }}></div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-
-                <div className="relative z-10">
-                  <div className="flex gap-2 mb-4">
-                    <span className="text-[10px] font-bold text-white uppercase tracking-wide bg-gradient-to-r from-emerald-500 to-teal-500 px-2 py-1 rounded shadow-sm">
-                      {tour.format === 'LEAGUE' ? 'Liga' : 'Mata-Mata'}
-                    </span>
-                    <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide ${tour.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
-                      {tour.status === 'ACTIVE' ? 'Ativo' : 'Encerrado'}
-                    </span>
-                  </div>
-
-                  <h3 className="text-2xl font-bold text-slate-900 mb-2 leading-tight group-hover:text-emerald-700 transition-colors">{tour.name}</h3>
-                  <div className="flex justify-between items-end mt-4">
-                    <div className="text-sm text-slate-500 font-medium bg-white/50 px-2 py-1 rounded-lg">
-                      {SPORT_TYPE_DETAILS[tour.sportType]?.label}
-                    </div>
-                    {isCreator && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); openDeleteModal(tour.id, 'TOURNAMENT'); }}
-                        className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition btn-feedback"
-                        title="Excluir"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="mt-6">
-                    <div className="flex justify-between text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                      <span>Progresso</span>
-                      <span>{(tour.currentRound / tour.totalRounds * 100).toFixed(0)}%</span>
-                    </div>
-                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${(tour.currentRound / tour.totalRounds) * 100}%` }}></div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
+              )
+            })}
           {activeTournaments.length === 0 && (
             <div className="col-span-full py-20 text-center text-slate-400 glass-panel rounded-3xl border-dashed border-2 border-slate-200 interactive-card">
               <Trophy size={48} className="mx-auto text-slate-300 mb-2 opacity-50" />
@@ -2657,7 +2824,7 @@ const App: React.FC = () => {
             </div>
           )}
         </div>
-      </div>
+      </div >
     );
   };
 
@@ -2907,6 +3074,15 @@ const App: React.FC = () => {
             );
           })}
           <button
+            onClick={toggleTheme}
+            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-300 w-16 btn-feedback ${theme === 'dark' ? 'text-amber-400 bg-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
+          >
+            {theme === 'dark' ? <Trophy size={20} className="fill-current" /> : <Shield size={20} />}
+            {/* Using existing icons because Moon/Sun not imported. Will stick to text or reuse icons. */}
+            <span className="text-[10px] font-bold">{theme === 'dark' ? 'Dark' : 'Light'}</span>
+          </button>
+
+          <button
             onClick={() => setViewingProfileId(currentUser.id)}
             className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-300 w-16 btn-feedback ${viewingProfileId ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-slate-600'}`}
           >
@@ -3056,7 +3232,7 @@ const App: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cidade Sede</label>
-                  <input type="text" name="city" defaultValue={editingTeam?.city} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="São Paulo" />
+                  <CitySelect name="city" value={editingTeam?.city} onChange={() => { }} required />
                 </div>
               </div>
 
@@ -3184,6 +3360,10 @@ const App: React.FC = () => {
                   <input type="text" name="address" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="Rua X, 123" />
                 </div>
                 <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cidade</label>
+                  <CitySelect name="city" onChange={() => { }} required />
+                </div>
+                <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Link do Google Maps</label>
                   <input type="url" name="googleMapsUrl" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" placeholder="https://maps.google.com/..." />
                 </div>
@@ -3240,6 +3420,50 @@ const App: React.FC = () => {
           Likely renderTeamsView handles it.
           Let's assume it's covered there or not needed globally.
       */}
+
+      {/* 6. EVALUATION MODAL */}
+      {isEvaluationModalOpen && selectedPlayerForEvaluation && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="glass-panel text-slate-900 mx-auto w-full max-w-md rounded-3xl p-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-2xl font-black">Avaliar Atleta</h2>
+                <p className="text-sm text-slate-500 font-bold">{selectedPlayerForEvaluation.player.name}</p>
+              </div>
+              <button onClick={() => setIsEvaluationModalOpen(false)}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
+            </div>
+            <form onSubmit={handleSaveEvaluation} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nota Geral (0-10)</label>
+                <input type="number" name="rating" min="0" max="10" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-center text-xl" required />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Técnica</label>
+                  <input type="number" name="technicalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tática</label>
+                  <input type="number" name="tacticalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Físico</label>
+                  <input type="number" name="physicalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mental</label>
+                  <input type="number" name="mentalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Comentários / Feedback</label>
+                <textarea name="comments" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 h-24 resize-none" placeholder="Pontos fortes, pontos a melhorar..."></textarea>
+              </div>
+              <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 mt-2">Salvar Avaliação</button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* GLOBAL DELETE CONFIRMATION MODAL */}
       {

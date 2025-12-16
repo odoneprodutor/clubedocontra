@@ -58,6 +58,7 @@ export const ROLE_DESCRIPTIONS = {
 export const SAFE_TEAM: Team = {
   id: 'ghost',
   name: 'Time Desconhecido',
+  sportType: SportType.FUT7,
   shortName: '???',
   city: 'Desconhecida',
   logoColor: '#cbd5e1',

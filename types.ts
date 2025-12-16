@@ -63,6 +63,20 @@ export interface Player {
   userId?: string; // Link to user account
 }
 
+export interface PlayerEvaluation {
+  id: string;
+  playerId: string;
+  evaluatorId: string;
+  matchId?: string;
+  rating: number; // 0-10
+  technicalScore?: number;
+  tacticalScore?: number;
+  physicalScore?: number;
+  mentalScore?: number;
+  comments?: string;
+  createdAt: string;
+}
+
 export interface Arena {
   id: string;
   name: string;
@@ -72,6 +86,7 @@ export interface Arena {
   googleMapsUrl?: string; // New: URL link
   profilePicture?: string; // New: Arena thumb
   coverPicture?: string; // New: Arena cover
+  city?: string; // Standardized city
 }
 
 export interface TacticalPosition {
@@ -100,6 +115,7 @@ export interface Team extends BaseEntity {
   roster: Player[];
   tacticalFormation: TacticalPosition[]; // Default formation
   sportType: SportType; // Added for tactical context
+  detailedStats?: Record<string, any>; // JSONB stats
 }
 
 export interface Tournament extends BaseEntity {
@@ -112,6 +128,8 @@ export interface Tournament extends BaseEntity {
   totalRounds: number; // Calculated field usually
   maxTeams?: number; // New input field
   participatingTeamIds: string[]; // No ? because we init as []
+  city?: string; // Standardized city for filtering
+  detailedStats?: Record<string, any>; // JSONB stats
 }
 
 export interface MatchEvent {
@@ -162,6 +180,7 @@ export interface Match extends BaseEntity {
   // Streaming & Media
   youtubeVideoId?: string; // Extracted ID for embed
   media: MatchMedia[];
+  city?: string; // Standardized city if neutral ground or specific
 }
 
 export interface NewsItem {
