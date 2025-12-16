@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { UserAccount, UserRole, Team, CurrentUser, PlayerStats, SocialConnection } from '../types';
+import { UserAccount, UserRole, Team, CurrentUser, PlayerStats, SocialConnection, Match, PlayerEvaluation, MatchStatus } from '../types';
 import {
    Camera, Edit2, MapPin, Calendar, Mail, Shield, Crown, Save, X, Activity, Heart, ArrowLeft, Lock, AlertTriangle, Moon, Sun, ChevronDown
 } from 'lucide-react';
@@ -11,6 +11,8 @@ interface UserProfileViewProps {
    currentUser: CurrentUser;
    teams: Team[];
    socialGraph: SocialConnection[];
+   matches: Match[]; // New prop
+   evaluations: PlayerEvaluation[]; // New prop
    onClose: () => void;
    onUpdateProfile: (updatedUser: UserAccount) => void;
    onFollow: (targetId: string) => void;
@@ -23,7 +25,7 @@ interface UserProfileViewProps {
 }
 
 const UserProfileView: React.FC<UserProfileViewProps> = ({
-   viewingUser, currentUser, teams, socialGraph, onClose, onUpdateProfile, onFollow, onTeamClick, onDeleteUser, onUploadImage, onTogglePlayerRole, theme, toggleTheme
+   viewingUser, currentUser, teams, socialGraph, matches, evaluations, onClose, onUpdateProfile, onFollow, onTeamClick, onDeleteUser, onUploadImage, onTogglePlayerRole, theme, toggleTheme
 }) => {
    const isSelf = currentUser.id === viewingUser.id;
    const isFollowing = socialGraph.some(s => s.followerId === currentUser.id && s.targetId === viewingUser.id);
@@ -44,6 +46,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
 
    const [isEditing, setIsEditing] = useState(false);
    const [isUploading, setIsUploading] = useState(false); // New Loading State
+   const [showAllEvaluations, setShowAllEvaluations] = useState(false); // Added this line
 
    // Form State
    const [formData, setFormData] = useState({
@@ -59,16 +62,31 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
    });
 
    // Calculate Player Stats if applicable for the ACTIVE team
+   // Calculate Player Stats if applicable for the ACTIVE team
    const getPlayerStats = (): PlayerStats | null => {
-      if (viewingUser.role === UserRole.PLAYER && activeTeam) {
+      if (activeTeam) {
          const player = activeTeam.roster.find(p => p.userId === viewingUser.id || p.id === viewingUser.relatedPlayerId);
-         if (!player) return activeTeam.roster[0]?.stats || null; // Fallback
-         return player?.stats || null;
+         if (player) {
+            return player.stats || { goals: 0, assists: 0, matchesPlayed: 0, yellowCards: 0, redCards: 0 };
+         }
       }
       return null;
    };
 
    const playerStats = getPlayerStats();
+
+   // --- Derived Data ---
+   // 1. Evaluations
+   const targetPlayerId = viewingUser.relatedPlayerId || activeTeam?.roster.find(p => p.userId === viewingUser.id)?.id;
+   const userEvaluations = evaluations.filter(e => e.playerId === targetPlayerId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+   // 2. Recent Matches (for the active team)
+   const recentMatches = activeTeamId
+      ? matches
+         .filter(m => (m.homeTeamId === activeTeamId || m.awayTeamId === activeTeamId) && m.status === MatchStatus.FINISHED)
+         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+         .slice(0, 5)
+      : [];
 
    // Sync activeTeamId when viewingUser changes
    useEffect(() => {
@@ -110,7 +128,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
    const canEditTeam = viewingUser.role === UserRole.FAN;
 
    return (
-      <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 pb-20 pt-32 md:pt-0 relative z-30">
+      <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 pb-20 pt-2 md:pt-0 relative z-30">
          <button onClick={onClose} className="absolute top-4 left-4 md:static flex items-center gap-2 text-slate-500 hover:text-slate-800 mb-4 transition z-50 bg-white/50 backdrop-blur md:bg-transparent rounded-full px-3 py-1">
             <ArrowLeft size={16} /> Voltar
          </button>
@@ -122,7 +140,16 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                {formData.cover ? (
                   <img src={formData.cover} alt="Cover" className="w-full h-full object-cover" />
                ) : (
-                  <div className="w-full h-full bg-gradient-to-r from-emerald-600 to-slate-800"></div>
+                  <div
+                     className="w-full h-full transition-colors duration-500"
+                     style={{
+                        background: activeTeam?.primaryColor
+                           ? `linear-gradient(135deg, ${activeTeam.primaryColor}, ${activeTeam.secondaryColor || '#1f2937'})`
+                           : undefined
+                     }}
+                  >
+                     {!activeTeam?.primaryColor && <div className="w-full h-full bg-gradient-to-r from-emerald-600 to-slate-800"></div>}
+                  </div>
                )}
 
                {isEditing && (
@@ -359,6 +386,110 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                            </div>
                         </div>
                      )}
+
+                     {/* RECENT MATCHES */}
+                     {recentMatches.length > 0 && !isEditing && (
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                           <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide">
+                              <Calendar size={16} className="text-emerald-500" /> Últimos Jogos
+                           </h3>
+                           <div className="space-y-3">
+                              {recentMatches.map(match => {
+                                 const isHome = match.homeTeamId === activeTeamId;
+                                 const result = isHome
+                                    ? (match.homeScore > match.awayScore ? 'W' : match.homeScore < match.awayScore ? 'L' : 'D')
+                                    : (match.awayScore > match.homeScore ? 'W' : match.awayScore < match.homeScore ? 'L' : 'D');
+                                 const color = result === 'W' ? 'bg-emerald-100 text-emerald-700' : result === 'L' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700';
+
+                                 return (
+                                    <div key={match.id} className="flex items-center justify-between text-sm pb-3 border-b border-slate-100 dark:border-slate-700 last:border-0 last:pb-0">
+                                       <div className="flex items-center gap-3">
+                                          <div className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${color}`}>
+                                             {result}
+                                          </div>
+                                          <div>
+                                             <span className="font-bold text-slate-700 dark:text-slate-200">{isHome ? teams.find(t => t.id === match.awayTeamId)?.name : teams.find(t => t.id === match.homeTeamId)?.name}</span>
+                                             <div className="text-[10px] text-slate-400">{new Date(match.date).toLocaleDateString()}</div>
+                                          </div>
+                                       </div>
+                                       <div className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                                          {match.homeScore} - {match.awayScore}
+                                       </div>
+                                    </div>
+                                 );
+                              })}
+                           </div>
+                        </div>
+                     )}
+
+                     {/* EVALUATIONS */}
+                     {/* EVALUATIONS */}
+                     {userEvaluations.length > 0 && !isEditing && (
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                           <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide">
+                              <Activity size={16} className="text-emerald-500" /> Histórico de Avaliações
+                           </h3>
+                           <div className="space-y-4">
+                              {(showAllEvaluations ? userEvaluations : userEvaluations.slice(0, 2)).map(ev => {
+                                 // Attempt to find team context for evaluator
+                                 const evaluatorTeam = teams.find(t => t.createdBy === ev.evaluatorId); // Heuristic: Team Owner
+                                 const evaluatorLabel = ev.evaluatorId === currentUser.id
+                                    ? 'Você'
+                                    : (evaluatorTeam ? `Treinador (${evaluatorTeam.name})` : 'Treinador');
+
+                                 return (
+                                    <div key={ev.id} className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-lg">
+                                       <div className="flex justify-between items-start mb-2">
+                                          <div>
+                                             <div className="text-xs text-slate-400 font-bold uppercase">{new Date(ev.createdAt).toLocaleDateString()}</div>
+                                             <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">Avaliador: <span className="text-slate-700 dark:text-slate-300">{evaluatorLabel}</span></div>
+                                          </div>
+                                          <div className={`text-white font-bold px-2 py-1 rounded text-sm ${ev.rating >= 8 ? 'bg-emerald-500' : ev.rating >= 6 ? 'bg-yellow-500' : 'bg-red-500'}`}>
+                                             {ev.rating.toFixed(1)}
+                                          </div>
+                                       </div>
+
+                                       {/* Comments Section - Highlighted */}
+                                       {ev.comments && (
+                                          <div className="mt-2 mb-3 bg-white dark:bg-slate-800 p-2 rounded border border-slate-100 dark:border-slate-600">
+                                             <p className="text-xs text-slate-600 dark:text-slate-300 italic">"{ev.comments}"</p>
+                                          </div>
+                                       )}
+
+                                       <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+                                          <div className="bg-white dark:bg-slate-600 p-1 rounded">
+                                             <div className="text-[8px] text-slate-400 uppercase font-bold">Tec</div>
+                                             <div className="font-bold text-xs dark:text-white">{ev.technicalScore}</div>
+                                          </div>
+                                          <div className="bg-white dark:bg-slate-600 p-1 rounded">
+                                             <div className="text-[8px] text-slate-400 uppercase font-bold">Tat</div>
+                                             <div className="font-bold text-xs dark:text-white">{ev.tacticalScore}</div>
+                                          </div>
+                                          <div className="bg-white dark:bg-slate-600 p-1 rounded">
+                                             <div className="text-[8px] text-slate-400 uppercase font-bold">Fis</div>
+                                             <div className="font-bold text-xs dark:text-white">{ev.physicalScore}</div>
+                                          </div>
+                                          <div className="bg-white dark:bg-slate-600 p-1 rounded">
+                                             <div className="text-[8px] text-slate-400 uppercase font-bold">Men</div>
+                                             <div className="font-bold text-xs dark:text-white">{ev.mentalScore}</div>
+                                          </div>
+                                       </div>
+                                    </div>
+                                 );
+                              })}
+                           </div>
+
+                           {/* Show More Button */}
+                           {userEvaluations.length > 2 && (
+                              <button
+                                 onClick={() => setShowAllEvaluations(!showAllEvaluations)}
+                                 className="w-full mt-4 py-2 text-xs font-bold text-slate-500 hover:text-emerald-600 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-lg transition border border-dashed border-slate-200 dark:border-slate-700"
+                              >
+                                 {showAllEvaluations ? 'Ver menos' : `Ver mais (${userEvaluations.length - 2} restantes)`}
+                              </button>
+                           )}
+                        </div>
+                     )}
                   </div>
 
                   {/* RIGHT COL: SIDEBAR */}
@@ -425,8 +556,10 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                                     <Crown size={48} />
                                  </div>
                                  <div className="flex items-center gap-3 relative z-10">
-                                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold shadow-md" style={{ backgroundColor: activeTeam.logoColor }}>
-                                       {activeTeam.shortName}
+                                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold shadow-md border-2 border-white dark:border-slate-700 overflow-hidden" style={{ backgroundColor: activeTeam.logoColor }}>
+                                       {activeTeam.profilePicture ? (
+                                          <img src={activeTeam.profilePicture} alt={activeTeam.shortName} className="w-full h-full object-cover" />
+                                       ) : activeTeam.shortName.toUpperCase()}
                                     </div>
                                     <div>
                                        <div className="font-bold text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition">{activeTeam.name}</div>

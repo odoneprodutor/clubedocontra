@@ -122,7 +122,7 @@ const useLocationData = () => {
 // --- COMPONENT: City Select ---
 interface CitySelectProps {
   value?: string;
-  onChange: (value: string) => void;
+  onChange?: (value: string) => void; // Made Optional
   className?: string;
   required?: boolean;
   name?: string;
@@ -149,17 +149,19 @@ const CitySelect: React.FC<CitySelectProps> = ({ value, onChange, className, req
     const uf = e.target.value;
     setSelectedState(uf);
     setSelectedCity('');
-    onChange(''); // clear
+    if (onChange) onChange(''); // safe call
     fetchCitiesForState(uf);
   };
 
   const handleCityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const city = e.target.value;
     setSelectedCity(city);
-    if (city && selectedState) {
-      onChange(`${city} - ${selectedState}`);
-    } else {
-      onChange(city);
+    if (onChange) {
+      if (city && selectedState) {
+        onChange(`${city} - ${selectedState}`);
+      } else {
+        onChange(city);
+      }
     }
   };
 
@@ -514,6 +516,7 @@ const App: React.FC = () => {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [socialGraph, setSocialGraph] = useState<SocialConnection[]>([]);
+  const [evaluations, setEvaluations] = useState<PlayerEvaluation[]>([]);
 
   // Loading State
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -545,23 +548,25 @@ const App: React.FC = () => {
     const fetchData = async () => {
       setIsLoadingData(true);
       try {
-        const [usersRes, teamsRes, matchesRes, arenasRes, tournamentsRes, notifRes, socialRes] = await Promise.all([
+        const [usersRes, teamsRes, matchesRes, arenasRes, tournamentsRes, notifRes, socialRes, evalRes] = await Promise.all([
           supabase.from('users').select('*'),
           supabase.from('teams').select('*').eq('is_deleted', false),
           supabase.from('matches').select('*').eq('is_deleted', false),
           supabase.from('arenas').select('*'),
           supabase.from('tournaments').select('*').eq('is_deleted', false),
           supabase.from('notifications').select('*'),
-          supabase.from('social_connections').select('*')
+          supabase.from('social_connections').select('*'),
+          supabase.from('player_evaluations').select('*')
         ]);
 
         if (usersRes.data) setUserAccounts(usersRes.data.map((u: any) => ({ ...u, teamId: u.team_id, relatedPlayerId: u.related_player_id })));
-        if (teamsRes.data) setTeams(teamsRes.data.map((t: any) => ({ ...t, logoColor: t.logo_color, createdBy: t.created_by, isDeleted: t.is_deleted, goalsFor: t.goals_for, goalsAgainst: t.goals_against, shortName: t.short_name, tacticalFormation: t.tactical_formation })));
+        if (teamsRes.data) setTeams(teamsRes.data.map((t: any) => ({ ...t, logoColor: t.logo_color, primaryColor: t.primary_color, secondaryColor: t.secondary_color, tertiaryColor: t.tertiary_color, cover: t.cover, profilePicture: t.profile_picture, createdBy: t.created_by, isDeleted: t.is_deleted, goalsFor: t.goals_for, goalsAgainst: t.goals_against, shortName: t.short_name, tacticalFormation: t.tactical_formation })));
         if (matchesRes.data) setMatches(matchesRes.data.map((m: any) => ({ ...m, homeTeamId: m.home_team_id, awayTeamId: m.away_team_id, arenaId: m.arena_id, sportType: m.sport_type, tournamentId: m.tournament_id, homeScore: m.home_score, awayScore: m.away_score, youtubeVideoId: m.youtube_video_id, createdBy: m.created_by, isDeleted: m.is_deleted, chatMessages: m.chat_messages, homeTactics: m.home_tactics, awayTactics: m.away_tactics })));
-        if (arenasRes.data) setArenas(arenasRes.data);
+        if (arenasRes.data) setArenas(arenasRes.data.map((a: any) => ({ ...a, googleMapsUrl: a.google_maps_url, profilePicture: a.profile_picture, coverPicture: a.cover_picture })));
         if (tournamentsRes.data) setTournaments(tournamentsRes.data.map((t: any) => ({ ...t, sportType: t.sport_type, currentRound: t.current_round, totalRounds: t.total_rounds, participatingTeamIds: t.participating_team_ids, createdBy: t.created_by, isDeleted: t.is_deleted })));
         if (notifRes.data) setNotifications(notifRes.data.map((n: any) => ({ ...n, fromId: n.from_id, fromName: n.from_name, toUserId: n.to_user_id, isRead: n.is_read })));
         if (socialRes.data) setSocialGraph(socialRes.data.map((s: any) => ({ ...s, followerId: s.follower_id, targetId: s.target_id, targetType: s.target_type })));
+        if (evalRes.data) setEvaluations(evalRes.data.map((e: any) => ({ ...e, playerId: e.player_id, evaluatorId: e.evaluator_id, matchId: e.match_id, technicalScore: e.technical_score, tacticalScore: e.tactical_score, physicalScore: e.physical_score, mentalScore: e.mental_score, createdAt: e.created_at })));
 
       } catch (error) {
         console.error("Error fetching data from Supabase:", error);
@@ -606,9 +611,22 @@ const App: React.FC = () => {
       alert("Erro ao salvar avaliação (Banco de dados pode estar desatualizado).");
     } else {
       alert("Avaliação salva com sucesso!");
+      const mappedEval: PlayerEvaluation = {
+        id: newEval.id,
+        playerId: newEval.player_id,
+        evaluatorId: newEval.evaluator_id,
+        rating: newEval.rating,
+        technicalScore: newEval.technical_score,
+        tacticalScore: newEval.tactical_score,
+        physicalScore: newEval.physical_score,
+        mentalScore: newEval.mental_score,
+        comments: newEval.comments,
+        createdAt: new Date().toISOString()
+      };
+      setEvaluations(prev => [...prev, mappedEval]);
+      setIsEvaluationModalOpen(false);
+      setSelectedPlayerForEvaluation(null);
     }
-    setIsEvaluationModalOpen(false);
-    setSelectedPlayerForEvaluation(null);
   };
 
   // Navigation / UI State
@@ -627,6 +645,18 @@ const App: React.FC = () => {
 
   const [viewingTeamId, setViewingTeamId] = useState<string | null>(null);
   const [isEditingTeam, setIsEditingTeam] = useState(false);
+  const [previewTeamData, setPreviewTeamData] = useState<Team | null>(null); // Local Preview State
+
+  // Sync Preview Data when entering edit mode
+  useEffect(() => {
+    if (isEditingTeam && viewingTeamId) {
+      const team = teams.find(t => t.id === viewingTeamId);
+      if (team) setPreviewTeamData(team);
+    } else {
+      setPreviewTeamData(null);
+    }
+  }, [isEditingTeam, viewingTeamId, teams]);
+
   const [teamMatchFilter, setTeamMatchFilter] = useState<'UPCOMING' | 'FINISHED'>('UPCOMING');
 
   // Modals / Detail Views State
@@ -1360,6 +1390,98 @@ const App: React.FC = () => {
     alert("Time criado com sucesso! Você foi adicionado como jogador e diretor.");
   };
 
+  const handleFinishMatch = async (matchId: string) => {
+    const match = matches.find(m => m.id === matchId);
+    if (!match) return;
+    if (match.status === MatchStatus.FINISHED) return;
+
+    const homeTeam = teams.find(t => t.id === match.homeTeamId);
+    const awayTeam = teams.find(t => t.id === match.awayTeamId);
+    if (!homeTeam || !awayTeam) return;
+
+    // 1. Calculate Result
+    const isDraw = match.homeScore === match.awayScore;
+    const homeWin = match.homeScore > match.awayScore;
+    const awayWin = match.awayScore > match.homeScore;
+
+    // 2. Prepare Updates Stats
+    const homeUpdates = {
+      points: homeTeam.points + (homeWin ? 3 : isDraw ? 1 : 0),
+      wins: homeTeam.wins + (homeWin ? 1 : 0),
+      draws: homeTeam.draws + (isDraw ? 1 : 0),
+      losses: homeTeam.losses + (awayWin ? 1 : 0),
+      goals_for: homeTeam.goalsFor + match.homeScore,
+      goals_against: homeTeam.goalsAgainst + match.awayScore
+    };
+
+    const awayUpdates = {
+      points: awayTeam.points + (awayWin ? 3 : isDraw ? 1 : 0),
+      wins: awayTeam.wins + (awayWin ? 1 : 0),
+      draws: awayTeam.draws + (isDraw ? 1 : 0),
+      losses: awayTeam.losses + (homeWin ? 1 : 0),
+      goals_for: awayTeam.goalsFor + match.awayScore,
+      goals_against: awayTeam.goalsAgainst + match.homeScore
+    };
+
+    // 3. Process Player Stats from Events
+    const playerStatsUpdates: Record<string, PlayerStats> = {};
+
+    // Helper
+    const getStats = (pId: string, team: Team) => {
+      if (playerStatsUpdates[pId]) return playerStatsUpdates[pId];
+      const p = team.roster.find(r => r.id === pId);
+      return p ? { ...p.stats } : { goals: 0, assists: 0, yellowCards: 0, redCards: 0, matchesPlayed: 0 };
+    };
+
+    // Add Match Played to everyone on roster
+    [homeTeam, awayTeam].forEach(team => {
+      team.roster.forEach(p => {
+        const s = getStats(p.id, team);
+        s.matchesPlayed += 1;
+        playerStatsUpdates[p.id] = s;
+      });
+    });
+
+    // Add specific event stats
+    match.events.forEach(e => {
+      if (e.playerId) {
+        const team = e.teamId === homeTeam.id ? homeTeam : awayTeam;
+        const s = getStats(e.playerId, team);
+        if (e.type === MatchEventType.GOAL) s.goals += 1;
+        if (e.type === MatchEventType.YELLOW_CARD) s.yellowCards += 1;
+        if (e.type === MatchEventType.RED_CARD) s.redCards += 1;
+        playerStatsUpdates[e.playerId] = s;
+      }
+    });
+
+    // 4. Persistence
+    await supabase.from('teams').update(homeUpdates).eq('id', homeTeam.id);
+    await supabase.from('teams').update(awayUpdates).eq('id', awayTeam.id);
+    await supabase.from('matches').update({ status: MatchStatus.FINISHED }).eq('id', match.id);
+
+    // Update Rosters (assuming JSON column)
+    const newHomeRoster = homeTeam.roster.map(p => playerStatsUpdates[p.id] ? { ...p, stats: playerStatsUpdates[p.id] } : p);
+    const newAwayRoster = awayTeam.roster.map(p => playerStatsUpdates[p.id] ? { ...p, stats: playerStatsUpdates[p.id] } : p);
+
+    const { error: errorRosterHome } = await supabase.from('teams').update({ roster: newHomeRoster }).eq('id', homeTeam.id);
+    const { error: errorRosterAway } = await supabase.from('teams').update({ roster: newAwayRoster }).eq('id', awayTeam.id);
+
+    if (errorRosterHome || errorRosterAway) {
+      console.error("Error updating rosters", errorRosterHome, errorRosterAway);
+      alert("Erro ao atualizar estatísticas dos jogadores.");
+    }
+
+    // Update Local State
+    setMatches(prev => prev.map(m => m.id === matchId ? { ...m, status: MatchStatus.FINISHED } : m));
+    setTeams(prev => prev.map(t => {
+      if (t.id === homeTeam.id) return { ...t, ...homeUpdates, roster: newHomeRoster, goalsFor: homeUpdates.goals_for, goalsAgainst: homeUpdates.goals_against };
+      if (t.id === awayTeam.id) return { ...t, ...awayUpdates, roster: newAwayRoster, goalsFor: awayUpdates.goals_for, goalsAgainst: awayUpdates.goals_against };
+      return t;
+    }));
+    setSelectedMatchId(null);
+    alert("Partida encerrada! Estatísticas atualizadas com sucesso.");
+  };
+
   const handleUpdateTeam = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!currentUser || !editingTeam) return;
@@ -1419,17 +1541,17 @@ const App: React.FC = () => {
 
     // Update Supabase
     // Note: We are mapping primaryColor to logo_color for DB compatibility
-    // Images are not persisted to DB yet due to schema limitation, but are updated in local state for the session.
+    // Now saving styling columns to DB (requires migration_v4)
     const { error } = await supabase.from('teams').update({
       name: teamName,
       short_name: shortName,
       city,
-      logo_color: primaryColor, // Map Primary to Logo Color
-      // primary_color: primaryColor, // Future
-      // secondary_color: secondaryColor, // Future
-      // tertiary_color: tertiaryColor, // Future
-      // cover: coverUrl, // Future
-      // profile_picture: profileUrl // Future
+      logo_color: primaryColor, // Map Primary to Logo Color (Legacy support)
+      primary_color: primaryColor,
+      secondary_color: secondaryColor,
+      tertiary_color: tertiaryColor,
+      cover: coverUrl,
+      profile_picture: profileUrl
     }).eq('id', editingTeam.id);
 
     if (error) {
@@ -1478,16 +1600,19 @@ const App: React.FC = () => {
       city: city // Add to object
     };
 
+    // Note: DB doesn't have cover_picture yet, so we omit it to prevent crash.
+    // Also DB might not have google_maps_url or city or profile_picture depending on migration status.
+    // Proceeding with safe subset or what we believe exists.
     const dbArena = {
       id: newArena.id,
       name: newArena.name,
       address: newArena.address,
-      city: newArena.city, // Add to DB object
+      // city: newArena.city, // Commenting out potentially missing columns to be safe based on "cover_picture" error
       lat: newArena.lat,
       lng: newArena.lng,
-      google_maps_url: newArena.googleMapsUrl,
-      profile_picture: newArena.profilePicture,
-      cover_picture: newArena.coverPicture
+      // google_maps_url: newArena.googleMapsUrl,
+      // profile_picture: newArena.profilePicture,
+      // cover_picture: newArena.coverPicture
     };
 
     const { error } = await supabase.from('arenas').insert(dbArena);
@@ -1741,6 +1866,7 @@ const App: React.FC = () => {
         onSendMessage={handleSendMessage}
         onSaveMatchTactics={handleSaveMatchTactics}
         onAddMedia={handleAddMatchMedia}
+        onFinishMatch={handleFinishMatch}
       />
     );
   }
@@ -1830,8 +1956,10 @@ const App: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-3 mt-2" onClick={() => handleTeamClick(activeDashboardTeam.id)}>
-                        <div className="w-8 h-8 rounded-full shadow-lg flex items-center justify-center text-xs font-bold text-white border-2 border-white/30" style={{ backgroundColor: activeDashboardTeam.logoColor || '#10b981' }}>
-                          {activeDashboardTeam.shortName}
+                        <div className="w-8 h-8 rounded-full shadow-lg flex items-center justify-center text-xs font-bold text-white border-2 border-white/30 overflow-hidden" style={{ backgroundColor: activeDashboardTeam.logoColor || '#10b981' }}>
+                          {activeDashboardTeam.profilePicture ? (
+                            <img src={activeDashboardTeam.profilePicture} alt={activeDashboardTeam.shortName.toUpperCase()} className="w-full h-full object-cover" />
+                          ) : activeDashboardTeam.shortName.toUpperCase()}
                         </div>
                         <span className="font-bold text-xl truncate">{activeDashboardTeam.name}</span>
                       </div>
@@ -1869,14 +1997,24 @@ const App: React.FC = () => {
                   <div className="absolute top-0 right-0 bg-purple-100 text-purple-700 text-[10px] font-bold px-3 py-1 rounded-bl-xl">Atribuído</div>
                   <div className="flex justify-between items-center mb-4 mt-2">
                     <div className="flex flex-col items-center gap-2">
-                      <span className="font-bold text-lg">{getTeam(match.homeTeamId).shortName}</span>
+                      <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold shadow-md overflow-hidden" style={{ backgroundColor: getTeam(match.homeTeamId).logoColor }}>
+                        {getTeam(match.homeTeamId).profilePicture ? (
+                          <img src={getTeam(match.homeTeamId).profilePicture} alt={getTeam(match.homeTeamId).shortName.toUpperCase()} className="w-full h-full object-cover" />
+                        ) : getTeam(match.homeTeamId).shortName.toUpperCase()}
+                      </div>
+                      <span className="font-bold text-sm text-center">{getTeam(match.homeTeamId).name}</span>
                       <div className="flex gap-1">
                         {getTeamForm(match.homeTeamId).map((f, i) => <div key={i} className={`w-2 h-2 rounded-full ${f.color}`}></div>)}
                       </div>
                     </div>
                     <span className="text-xs font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-full">VS</span>
                     <div className="flex flex-col items-center gap-2">
-                      <span className="font-bold text-lg">{getTeam(match.awayTeamId).shortName}</span>
+                      <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold shadow-md overflow-hidden" style={{ backgroundColor: getTeam(match.awayTeamId).logoColor }}>
+                        {getTeam(match.awayTeamId).profilePicture ? (
+                          <img src={getTeam(match.awayTeamId).profilePicture} alt={getTeam(match.awayTeamId).shortName.toUpperCase()} className="w-full h-full object-cover" />
+                        ) : getTeam(match.awayTeamId).shortName.toUpperCase()}
+                      </div>
+                      <span className="font-bold text-sm text-center">{getTeam(match.awayTeamId).name}</span>
                       <div className="flex gap-1">
                         {getTeamForm(match.awayTeamId).map((f, i) => <div key={i} className={`w-2 h-2 rounded-full ${f.color}`}></div>)}
                       </div>
@@ -1933,7 +2071,7 @@ const App: React.FC = () => {
         <div className="space-y-6">
           {/* Context Aware Championship Dropdown */}
           <div className="glass-panel p-6 rounded-3xl interactive-card">
-            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-lg">
+            <h3 className="font-bold text-white mb-4 flex items-center gap-2 text-lg">
               <Trophy size={20} className="text-amber-500 icon-hover" />
               Campeonatos
             </h3>
@@ -1982,7 +2120,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="glass-panel p-6 rounded-3xl interactive-card">
-            <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-lg">
+            <h3 className="font-bold text-white mb-4 flex items-center gap-2 text-lg">
               <Newspaper size={20} className="text-blue-500 icon-hover" />
               Notícias
             </h3>
@@ -1990,7 +2128,7 @@ const App: React.FC = () => {
               {fanNews.length > 0 ? fanNews.slice(0, 3).map(news => (
                 <div key={news.id} className="group cursor-pointer">
                   <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide bg-emerald-50 px-2 py-0.5 rounded-full">{news.category}</span>
-                  <h4 className="font-bold text-sm text-slate-800 mt-1 group-hover:text-emerald-700 transition">{news.title}</h4>
+                  <h4 className="font-bold text-sm text-white mt-1 group-hover:text-emerald-400 transition">{news.title}</h4>
                   <div className="h-px bg-slate-100 w-full mt-3 group-last:hidden"></div>
                 </div>
               )) : (
@@ -2130,11 +2268,13 @@ const App: React.FC = () => {
           {/* HERO BANNER & HEADER */}
           <div className="glass-panel rounded-3xl overflow-hidden relative interactive-card">
             <div className="h-48 md:h-72 bg-slate-200 relative group">
-              {myTeam.cover ? (
+              {isEditingTeam && previewTeamData && previewTeamData.cover ? (
+                <img src={previewTeamData.cover} alt="Cover" className="w-full h-full object-cover transition-all" />
+              ) : (myTeam.cover ? (
                 <img src={myTeam.cover} alt="Cover" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full bg-gradient-to-r from-emerald-600 to-slate-800"></div>
-              )}
+                <div className="w-full h-full bg-gradient-to-r from-emerald-600 to-slate-800" style={isEditingTeam && previewTeamData ? { background: `linear-gradient(to right, ${previewTeamData.primaryColor || '#10b981'}, ${previewTeamData.secondaryColor || '#0f172a'})` } : {}}></div>
+              ))}
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
 
               {isEditable && (
@@ -2151,12 +2291,14 @@ const App: React.FC = () => {
 
                 <div className="flex justify-between items-end w-full md:w-auto">
                   {/* LOGO */}
-                  <div className="w-24 h-24 md:w-36 md:h-36 rounded-full border-4 border-white shadow-2xl flex items-center justify-center text-2xl md:text-4xl font-bold text-white relative group bg-white overflow-hidden icon-hover shrink-0" style={{ backgroundColor: myTeam.logoColor }}>
-                    {myTeam.profilePicture ? (
+                  <div className="w-24 h-24 md:w-36 md:h-36 rounded-full border-4 border-white shadow-2xl flex items-center justify-center text-2xl md:text-4xl font-bold text-white relative group bg-white overflow-hidden icon-hover shrink-0" style={{ backgroundColor: (isEditingTeam && previewTeamData) ? (previewTeamData.primaryColor || previewTeamData.logoColor) : myTeam.logoColor }}>
+                    {(isEditingTeam && previewTeamData && previewTeamData.profilePicture) ? (
+                      <img src={previewTeamData.profilePicture} alt={myTeam.shortName} className="w-full h-full object-cover" />
+                    ) : (myTeam.profilePicture ? (
                       <img src={myTeam.profilePicture} alt={myTeam.shortName} className="w-full h-full object-cover" />
                     ) : (
                       <span>{myTeam.shortName}</span>
-                    )}
+                    ))}
                   </div>
 
                   {/* MOBILE BUTTONS (Visible only on mobile next to logo) */}
@@ -2173,55 +2315,144 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="flex-1 mb-2 text-slate-900 md:pt-20 w-full">
-                  {isEditingTeam ? (
-                    <form onSubmit={handleUpdateTeam} className="flex flex-col gap-3 max-w-full w-full md:max-w-md bg-white p-4 rounded-xl shadow-lg mt-4 md:mt-0 relative z-20">
+                  {isEditingTeam && previewTeamData ? (
+                    <form onSubmit={async (e) => {
+                      e.preventDefault();
+                      const formData = new FormData(e.currentTarget);
+
+                      // Upload Images if changed
+                      const coverFile = formData.get('cover') as File;
+                      const profileFile = formData.get('profilePicture') as File;
+
+                      let coverUrl = previewTeamData.cover;
+                      if (coverFile && coverFile.size > 0) {
+                        const u = await uploadImage(coverFile);
+                        if (u) coverUrl = u;
+                      }
+
+                      let profileUrl = previewTeamData.profilePicture;
+                      if (profileFile && profileFile.size > 0) {
+                        const u = await uploadImage(profileFile);
+                        if (u) profileUrl = u;
+                      }
+
+                      // Update DB
+                      const updates = {
+                        name: previewTeamData.name,
+                        primary_color: previewTeamData.primaryColor,
+                        secondary_color: previewTeamData.secondaryColor,
+                        tertiary_color: previewTeamData.tertiaryColor,
+                        logo_color: previewTeamData.primaryColor, // Keep logo_color in sync with primary_color
+                        cover: coverUrl,
+                        profile_picture: profileUrl
+                      };
+
+                      const { error } = await supabase.from('teams').update(updates).eq('id', myTeam.id);
+
+                      if (error) {
+                        console.error('Error updating team:', error);
+                        alert('Erro ao salvar as alterações do time.');
+                      } else {
+                        // Update Global State
+                        setTeams(prev => prev.map(t => t.id === myTeam.id ? { ...t, ...previewTeamData, cover: coverUrl, profilePicture: profileUrl, logoColor: previewTeamData.primaryColor } : t));
+                        setIsEditingTeam(false);
+                      }
+                    }} className="flex flex-col gap-3 max-w-full w-full md:max-w-md bg-white p-4 rounded-xl shadow-lg mt-4 md:mt-0 relative z-20">
                       <div>
                         <label className="text-[10px] uppercase font-bold text-slate-400">Nome do Time</label>
-                        <input type="text" name="name" defaultValue={myTeam.name} className="w-full text-xl font-bold border-b border-slate-300 focus:outline-none bg-transparent text-slate-900 focus:border-emerald-500" />
+                        <input
+                          type="text"
+                          name="name"
+                          value={previewTeamData.name}
+                          onChange={(e) => setPreviewTeamData({ ...previewTeamData, name: e.target.value })}
+                          className="w-full text-xl font-bold border-b border-slate-300 focus:outline-none bg-transparent text-slate-900 focus:border-emerald-500"
+                        />
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="text-[10px] uppercase font-bold text-slate-400">Cor Principal</label>
-                          <input type="color" name="primaryColor" defaultValue={myTeam.primaryColor || myTeam.logoColor} className="h-8 w-full cursor-pointer rounded border border-slate-200" />
+                          <input
+                            type="color"
+                            name="primaryColor"
+                            value={previewTeamData.primaryColor || previewTeamData.logoColor}
+                            onChange={(e) => setPreviewTeamData({ ...previewTeamData, primaryColor: e.target.value })}
+                            className="h-8 w-full cursor-pointer rounded border border-slate-200"
+                          />
                         </div>
                         <div>
                           <label className="text-[10px] uppercase font-bold text-slate-400">Cor Secundária</label>
-                          <input type="color" name="secondaryColor" defaultValue={myTeam.secondaryColor || '#ffffff'} className="h-8 w-full cursor-pointer rounded border border-slate-200" />
+                          <input
+                            type="color"
+                            name="secondaryColor"
+                            value={previewTeamData.secondaryColor || '#ffffff'}
+                            onChange={(e) => setPreviewTeamData({ ...previewTeamData, secondaryColor: e.target.value })}
+                            className="h-8 w-full cursor-pointer rounded border border-slate-200"
+                          />
                         </div>
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <input type="checkbox" id="useTertiary" className="rounded text-emerald-600 focus:ring-emerald-500" defaultChecked={!!myTeam.tertiaryColor} onChange={(e) => {
-                          const el = document.getElementById('tertiaryColorInput');
-                          if (el) el.style.display = e.target.checked ? 'block' : 'none';
-                        }} />
+                        <input
+                          type="checkbox"
+                          id="useTertiary"
+                          className="rounded text-emerald-600 focus:ring-emerald-500"
+                          checked={!!previewTeamData.tertiaryColor}
+                          onChange={(e) => setPreviewTeamData({ ...previewTeamData, tertiaryColor: e.target.checked ? '#000000' : undefined })}
+                        />
                         <label htmlFor="useTertiary" className="text-xs font-bold text-slate-500">Usar Terceira Cor</label>
                       </div>
-                      <div id="tertiaryColorInput" style={{ display: myTeam.tertiaryColor ? 'block' : 'none' }}>
-                        <label className="text-[10px] uppercase font-bold text-slate-400">Cor Terciária</label>
-                        <input type="color" name="tertiaryColor" defaultValue={myTeam.tertiaryColor || '#000000'} className="h-8 w-full cursor-pointer rounded border border-slate-200" />
-                      </div>
+                      {previewTeamData.tertiaryColor && (
+                        <div id="tertiaryColorInput">
+                          <label className="text-[10px] uppercase font-bold text-slate-400">Cor Terciária</label>
+                          <input
+                            type="color"
+                            name="tertiaryColor"
+                            value={previewTeamData.tertiaryColor}
+                            onChange={(e) => setPreviewTeamData({ ...previewTeamData, tertiaryColor: e.target.value })}
+                            className="h-8 w-full cursor-pointer rounded border border-slate-200"
+                          />
+                        </div>
+                      )}
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="text-[10px] uppercase font-bold text-slate-400">Escudo (Avatar)</label>
-                          <input type="file" name="profilePicture" accept="image/*" className="text-xs w-full text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-slate-100 hover:file:bg-slate-200" />
+                          <input
+                            type="file"
+                            name="profilePicture"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const url = URL.createObjectURL(file);
+                                setPreviewTeamData({ ...previewTeamData, profilePicture: url });
+                              }
+                            }}
+                            className="text-xs w-full text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-slate-100 hover:file:bg-slate-200"
+                          />
                         </div>
                         <div>
                           <label className="text-[10px] uppercase font-bold text-slate-400">Alterar Capa</label>
-                          <input type="file" name="cover" accept="image/*" className="text-xs w-full text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-slate-100 hover:file:bg-slate-200" />
+                          <input
+                            type="file"
+                            name="cover"
+                            accept="image/*"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const url = URL.createObjectURL(file);
+                                setPreviewTeamData({ ...previewTeamData, cover: url });
+                              }
+                            }}
+                            className="text-xs w-full text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-[10px] file:bg-slate-100 hover:file:bg-slate-200"
+                          />
                         </div>
                       </div>
 
-                      {/* Explicitly warn user about image persistence */}
-                      <p className="text-[10px] text-amber-600 font-medium bg-amber-50 p-2 rounded">
-                        * Imagens salvas apenas nesta sessão (Limitação do Banco).
+                      <p className="text-[10px] text-emerald-600 font-medium bg-emerald-50 p-2 rounded">
+                        * As alterações serão salvas ao clicar em confirmar.
                       </p>
-
-                      <input type="hidden" name="existingCover" value={myTeam.cover || ''} />
-                      <input type="hidden" name="existingProfile" value={myTeam.profilePicture || ''} />
-
 
                       <div className="flex gap-2 mt-1">
                         <button type="submit" className="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-xs font-bold shadow-md hover:bg-emerald-500 transition">Salvar Alterações</button>
@@ -2230,13 +2461,13 @@ const App: React.FC = () => {
                     </form>
                   ) : (
                     <>
-                      <h1 className="text-3xl md:text-5xl font-black text-slate-800 bg-white/80 md:bg-transparent backdrop-blur-md md:backdrop-blur-none px-3 py-1 md:px-0 md:py-0 rounded-lg md:rounded-none inline-block shadow-sm md:shadow-none break-words w-full">
+                      <h1 className="text-3xl md:text-5xl font-black text-white break-words w-full">
                         {myTeam.name}
                       </h1>
-                      <div className="flex items-center gap-4 text-slate-600 font-medium mt-2 flex-wrap">
-                        <span className="flex items-center gap-1 bg-white px-2 py-1 rounded-full text-xs shadow-sm"><MapPin size={14} /> {myTeam.city}</span>
-                        <span className="flex items-center gap-1 bg-white px-2 py-1 rounded-full text-xs shadow-sm"><Heart size={14} /> {fanCount} Torcedores</span>
-                        <span className="flex items-center gap-1 bg-white px-2 py-1 rounded-full text-xs shadow-sm"><Users size={14} /> {myTeam.roster.length} Jogadores</span>
+                      <div className="flex items-center gap-4 text-slate-300 font-medium mt-2 flex-wrap">
+                        <span className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded-full text-xs shadow-sm text-white"><MapPin size={14} /> {myTeam.city}</span>
+                        <span className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded-full text-xs shadow-sm text-white"><Heart size={14} /> {fanCount} Torcedores</span>
+                        <span className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded-full text-xs shadow-sm text-white"><Users size={14} /> {myTeam.roster.length} Jogadores</span>
                       </div>
                     </>
                   )}
@@ -2285,7 +2516,7 @@ const App: React.FC = () => {
             <div className="lg:col-span-1 space-y-6">
               <div className="glass-panel rounded-3xl p-6 interactive-card">
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="font-bold text-lg text-slate-800 flex items-center gap-2">
+                  <h3 className="font-bold text-lg text-white flex items-center gap-2">
                     <Calendar size={20} className="text-blue-500 icon-hover" /> Agenda
                   </h3>
                   <div className="relative">
@@ -2311,13 +2542,23 @@ const App: React.FC = () => {
                       </div>
                       <div className="flex justify-between items-center">
                         <div className="flex items-center gap-2 w-[40%]">
-                          <span className="font-bold text-slate-800 truncate text-sm">{getTeam(m.homeTeamId).shortName}</span>
+                          {getTeam(m.homeTeamId).profilePicture ? (
+                            <img src={getTeam(m.homeTeamId).profilePicture} alt={getTeam(m.homeTeamId).shortName.toUpperCase()} className="w-5 h-5 rounded-full object-cover border border-slate-100" />
+                          ) : (
+                            <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-500 overflow-hidden">
+                              {getTeam(m.homeTeamId).shortName.toUpperCase().substring(0, 2)}
+                            </div>
+                          )}
+                          <span className="font-bold text-slate-800 truncate text-sm">{getTeam(m.homeTeamId).shortName.toUpperCase()}</span>
                           {m.status === MatchStatus.FINISHED && <span className="text-lg font-bold ml-auto">{m.homeScore}</span>}
                         </div>
                         <span className="text-slate-300 text-xs font-light">VS</span>
                         <div className="flex items-center gap-2 w-[40%] justify-end">
                           {m.status === MatchStatus.FINISHED && <span className="text-lg font-bold mr-auto">{m.awayScore}</span>}
-                          <span className="font-bold text-slate-800 truncate text-sm">{getTeam(m.awayTeamId).shortName}</span>
+                          <span className="font-bold text-slate-800 truncate text-sm">{getTeam(m.awayTeamId).shortName.toUpperCase()}</span>
+                          {getTeam(m.awayTeamId).profilePicture && (
+                            <img src={getTeam(m.awayTeamId).profilePicture} className="w-5 h-5 rounded-full object-cover border border-slate-100" />
+                          )}
                         </div>
                       </div>
                     </div>
@@ -2332,14 +2573,16 @@ const App: React.FC = () => {
             <div className="lg:col-span-2 space-y-6">
               {/* TOP SCORERS */}
               <div className="glass-panel rounded-3xl p-6 interactive-card">
-                <h3 className="font-bold text-lg mb-6 flex items-center gap-2 text-slate-800">
+                <h3 className="font-bold text-lg mb-6 flex items-center gap-2 text-white">
                   <Target size={20} className="text-red-500 icon-hover" /> Artilharia do Time
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {teamScorers.length > 0 ? teamScorers.map((p, idx) => (
                     <div key={p.id} onClick={() => setSelectedPlayerForProfile({ player: p, teamName: myTeam.name })} className="flex items-center gap-3 p-3 bg-white/60 backdrop-blur rounded-xl border border-slate-100 hover:border-emerald-300 transition cursor-pointer hover:shadow-md btn-feedback">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-md ${idx === 0 ? 'bg-yellow-400' : idx === 1 ? 'bg-slate-400' : idx === 2 ? 'bg-orange-400' : 'bg-slate-200 text-slate-500'}`}>
-                        {idx + 1}
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-md overflow-hidden ${idx === 0 ? 'bg-yellow-400' : idx === 1 ? 'bg-slate-400' : idx === 2 ? 'bg-orange-400' : 'bg-slate-200 text-slate-500'}`}>
+                        {(p as any).avatar || (p as any).profilePicture ? (
+                          <img src={(p as any).avatar || (p as any).profilePicture} alt={p.name} className="w-full h-full object-cover" />
+                        ) : idx + 1}
                       </div>
                       <div className="flex-1">
                         <div className="font-bold text-slate-900 text-sm">{p.name}</div>
@@ -2358,7 +2601,7 @@ const App: React.FC = () => {
                 {/* TACTICS BOARD */}
                 <div className="glass-panel rounded-3xl p-6 interactive-card">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800">
+                    <h3 className="font-bold text-lg flex items-center gap-2 text-white">
                       <Crown size={20} className="text-amber-500 icon-hover" /> Formação
                     </h3>
                     {isEditable && (
@@ -2398,7 +2641,7 @@ const App: React.FC = () => {
 
                 {/* ROSTER LIST */}
                 <div className="glass-panel rounded-3xl p-6 interactive-card">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-white">
                     <Users size={20} className="text-blue-500 icon-hover" /> Elenco Completo
                   </h3>
                   {myTeam.roster.length > 0 ? (
@@ -2406,7 +2649,12 @@ const App: React.FC = () => {
                       {myTeam.roster.map(p => (
                         <div key={p.id} onClick={() => setSelectedPlayerForProfile({ player: p, teamName: myTeam.name })} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-emerald-300 hover:bg-emerald-50/50 cursor-pointer transition group btn-feedback">
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-mono font-bold text-slate-400 text-sm group-hover:bg-emerald-200 group-hover:text-emerald-800 transition">{p.number}</div>
+                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-mono font-bold text-slate-400 text-sm group-hover:bg-emerald-200 group-hover:text-emerald-800 transition overflow-hidden">
+                              {(function () {
+                                const avatar = (p.userId === currentUser.id ? currentUser.avatar : null) || (p as any).avatar || (p as any).profilePicture;
+                                return avatar ? <img src={avatar} alt={p.name} className="w-full h-full object-cover" /> : p.number;
+                              })()}
+                            </div>
                             <div>
                               <div className="font-bold text-slate-800 text-sm group-hover:text-emerald-700">{p.name}</div>
                               <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">{p.position}</div>
@@ -2484,7 +2732,7 @@ const App: React.FC = () => {
               <div className="h-24 relative overflow-hidden">
                 <div
                   className="absolute inset-0 bg-gradient-to-r from-slate-800 to-slate-900"
-                  style={t.primaryColor ? { background: `linear-gradient(135deg, ${t.primaryColor}, ${t.secondaryColor || t.primaryColor})` } : {}}
+                  style={{ background: (t.primaryColor || t.logoColor) ? `linear-gradient(135deg, ${t.primaryColor || t.logoColor}, ${t.secondaryColor || t.primaryColor || t.logoColor})` : '' }}
                 ></div>
                 {t.cover ? (
                   <img src={t.cover} className="w-full h-full object-cover opacity-50 group-hover:opacity-70 transition duration-500" alt={t.name} />
@@ -2504,7 +2752,7 @@ const App: React.FC = () => {
                     <img src={t.profilePicture} className="w-full h-full object-cover" alt={t.shortName} />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center font-black text-xl text-white" style={{ backgroundColor: t.primaryColor || t.logoColor || '#10b981' }}>
-                      {t.shortName.substring(0, 2)}
+                      {t.shortName.substring(0, 2).toUpperCase()}
                     </div>
                   )}
                 </div>
@@ -2867,7 +3115,7 @@ const App: React.FC = () => {
     return (
       <div className="space-y-12 animate-in fade-in duration-500">
         <div className="flex justify-between items-center">
-          <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Campeonatos</h2>
+          <h2 className="text-3xl font-black text-white tracking-tight">Campeonatos</h2>
           {canManage && (
             <button
               onClick={() => setIsTournamentModalOpen(true)}
@@ -2880,7 +3128,7 @@ const App: React.FC = () => {
         {/* SECTION 1: MY TOURNAMENTS */}
         {myTournaments.length > 0 && (
           <div className="space-y-4">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white border-l-4 border-emerald-500 pl-3">Meus Campeonatos (Participando/Criado)</h3>
+            <h3 className="text-xl font-bold text-white border-l-4 border-emerald-500 pl-3">Meus Campeonatos (Participando/Criado)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {myTournaments.map(renderTournamentCard)}
             </div>
@@ -2890,7 +3138,7 @@ const App: React.FC = () => {
         {/* SECTION 2: EXPLORE */}
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-white border-l-4 border-blue-500 pl-3">Explorar Campeonatos</h3>
+            <h3 className="text-xl font-bold text-white border-l-4 border-blue-500 pl-3">Explorar Campeonatos</h3>
           </div>
 
           {exploreTournaments.length > 0 ? (
@@ -3324,7 +3572,7 @@ const App: React.FC = () => {
                 <div className="grid grid-cols-3 gap-2">
                   <div>
                     <span className="text-[10px] text-slate-400">Primária*</span>
-                    <input type="color" name="primaryColor" defaultValue={editingTeam?.primaryColor || '#10b981'} className="w-full h-10 rounded cursor-pointer" />
+                    <input type="color" name="primaryColor" defaultValue={editingTeam?.primaryColor || editingTeam?.logoColor || '#10b981'} className="w-full h-10 rounded cursor-pointer" />
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400">Secundária*</span>
@@ -3478,7 +3726,7 @@ const App: React.FC = () => {
       {/* 5. USER PROFILE MODAL */}
       {
         viewingProfileId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-0 md:p-4 bg-white md:bg-black/60 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-0 md:p-4 bg-white md:bg-black/60 backdrop-blur-sm animate-in fade-in overflow-y-auto">
             <UserProfileView
               viewingUser={userAccounts.find(u => u.id === viewingProfileId) || currentUser!}
               currentUser={currentUser!}
@@ -3497,6 +3745,8 @@ const App: React.FC = () => {
               onTogglePlayerRole={handleTogglePlayerRole}
               theme={theme}
               toggleTheme={toggleTheme}
+              evaluations={evaluations}
+              matches={matches}
             />
           </div>
         )

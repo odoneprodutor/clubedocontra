@@ -4,7 +4,7 @@ import { Match, Team, MatchEventType, UserRole, Player, MatchStatus, TacticalPos
 import {
   Timer, X, Flag, AlertTriangle, ShieldAlert, Goal,
   User, Activity, List, MessageCircle, Send, Lock, CornerUpRight, Play, Square, Eye,
-  Video, Image as ImageIcon, Plus, MapPin, ChevronDown, ChevronUp
+  Video, Image as ImageIcon, Plus, MapPin, ChevronDown, ChevronUp, Pause, Clock, StopCircle, RefreshCw
 } from 'lucide-react';
 import TacticsBoard from './TacticsBoard';
 
@@ -20,19 +20,76 @@ interface MatchDetailViewProps {
   onSendMessage: (matchId: string, text: string) => void;
   onSaveMatchTactics: (matchId: string, teamId: string, tactics: TacticalPosition[]) => void;
   onAddMedia: (matchId: string, type: 'IMAGE' | 'VIDEO', content: string | File) => void;
+  onFinishMatch: (matchId: string) => void;
 }
 
 const MatchDetailView: React.FC<MatchDetailViewProps> = ({
-  match, homeTeam, awayTeam, arena, currentUser, onClose, onAddEvent, onViewPlayer, onSendMessage, onSaveMatchTactics, onAddMedia
+  match, homeTeam, awayTeam, arena, currentUser, onClose, onAddEvent, onViewPlayer, onSendMessage, onSaveMatchTactics, onAddMedia, onFinishMatch
 }) => {
   const [activeTab, setActiveTab] = useState<'TIMELINE' | 'LINEUPS' | 'STATS' | 'CHAT' | 'TRANSMISSION' | 'MEDIA' | 'LOCATION'>('TIMELINE');
   const [consoleOpen, setConsoleOpen] = useState(false);
-  const [isConsoleMinimized, setIsConsoleMinimized] = useState(false); // New State
+  const [isConsoleMinimized, setIsConsoleMinimized] = useState(false);
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false); // Collapsible Scoreboard State
   const [selectedEventType, setSelectedEventType] = useState<MatchEventType | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [eventMinute, setEventMinute] = useState(90);
   const [chatInput, setChatInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Game Timer State
+  const [gameTimer, setGameTimer] = useState(0); // in seconds
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [matchPeriod, setMatchPeriod] = useState<'1T' | 'INT' | '2T' | 'FIM'>('1T');
+  const [periodDuration, setPeriodDuration] = useState(20); // default minutes per half
+
+  useEffect(() => {
+    let interval: any;
+    if (isTimerRunning) {
+      interval = setInterval(() => {
+        setGameTimer(prev => prev + 1);
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [isTimerRunning]);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleGameControl = (action: 'START' | 'PAUSE' | 'RESUME' | 'NEXT_PERIOD' | 'END_GAME') => {
+    if (action === 'START') {
+      const durationStr = prompt("Tempo de jogo por tempo (minutos):", "20");
+      if (durationStr) {
+        setPeriodDuration(parseInt(durationStr));
+        setIsTimerRunning(true);
+        // If not live, make it live (in a real app, call API)
+        // match.status = MatchStatus.LIVE; // Local simulation
+      }
+    } else if (action === 'PAUSE') {
+      setIsTimerRunning(false);
+    } else if (action === 'RESUME') {
+      setIsTimerRunning(true);
+    } else if (action === 'NEXT_PERIOD') {
+      setIsTimerRunning(false);
+      if (matchPeriod === '1T') {
+        setMatchPeriod('INT');
+      } else if (matchPeriod === 'INT') {
+        setMatchPeriod('2T');
+        // Usually 2nd half starts from 0 or continues? 
+        // Let's reset for Sport types that reset (Futsal) or continue (Football). 
+        setGameTimer(0);
+      }
+    } else if (action === 'END_GAME') {
+      setIsTimerRunning(false);
+      setMatchPeriod('FIM');
+      // match.status = MatchStatus.FINISHED;
+      onFinishMatch(match.id);
+    }
+  };
 
   // Tactics State
   const [viewingTacticsTeamId, setViewingTacticsTeamId] = useState<string>(homeTeam.id);
@@ -74,7 +131,9 @@ const MatchDetailView: React.FC<MatchDetailViewProps> = ({
   const handleConsoleAction = (type: MatchEventType) => {
     setSelectedEventType(type);
     setConsoleOpen(true);
-    setEventMinute(Math.floor(Math.random() * 90) + 1);
+    // Use current game timer converted to minutes, ensuring at least 1st minute
+    const currentMin = Math.floor(gameTimer / 60) + 1;
+    setEventMinute(currentMin);
     setSelectedTeamId(null);
   };
 
@@ -125,7 +184,7 @@ const MatchDetailView: React.FC<MatchDetailViewProps> = ({
   };
 
   const renderLiveConsole = () => {
-    const actionBtnBase = "flex flex-col items-center justify-center h-20 w-full rounded-xl transition-all shadow-sm hover:shadow-lg active:scale-95 hover:scale-105 border border-white/10";
+    const actionBtnBase = "flex flex-col items-center justify-center h-14 w-full rounded-xl transition-all shadow-sm hover:shadow-lg active:scale-95 hover:scale-105 border border-white/10";
 
     return (
       <div className={`fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 z-50 transition-all duration-300 shadow-2xl ${isConsoleMinimized ? 'h-10 overflow-hidden' : 'p-4 pb-8'}`}>
@@ -145,25 +204,81 @@ const MatchDetailView: React.FC<MatchDetailViewProps> = ({
         {!isConsoleMinimized && (
           <div className="pt-2">
             {!consoleOpen ? (
-              <div className="max-w-3xl mx-auto grid grid-cols-3 sm:grid-cols-6 gap-4">
-                <button onClick={() => handleConsoleAction(MatchEventType.GOAL)} className={`${actionBtnBase} bg-emerald-600 hover:bg-emerald-500 text-white`}>
-                  <Goal size={24} /> <span className="text-xs font-bold mt-2">GOL</span>
-                </button>
-                <button onClick={() => handleConsoleAction(MatchEventType.YELLOW_CARD)} className={`${actionBtnBase} bg-yellow-400 hover:bg-yellow-300 text-slate-900`}>
-                  <ShieldAlert size={24} /> <span className="text-xs font-bold mt-2">AMARELO</span>
-                </button>
-                <button onClick={() => handleConsoleAction(MatchEventType.RED_CARD)} className={`${actionBtnBase} bg-red-600 hover:bg-red-500 text-white`}>
-                  <ShieldAlert size={24} /> <span className="text-xs font-bold mt-2">VERMELHO</span>
-                </button>
-                <button onClick={() => handleConsoleAction(MatchEventType.FOUL)} className={`${actionBtnBase} bg-slate-700 hover:bg-slate-600 text-white`}>
-                  <X size={24} /> <span className="text-xs font-bold mt-2">FALTA</span>
-                </button>
-                <button onClick={() => handleConsoleAction(MatchEventType.CORNER)} className={`${actionBtnBase} bg-blue-600 hover:bg-blue-500 text-white`}>
-                  <CornerUpRight size={24} /> <span className="text-xs font-bold mt-2">ESCANTEIO</span>
-                </button>
-                <button onClick={() => handleConsoleAction(MatchEventType.OFFSIDE)} className={`${actionBtnBase} bg-slate-600 hover:bg-slate-500 text-white`}>
-                  <Flag size={24} /> <span className="text-xs font-bold mt-2">IMPED.</span>
-                </button>
+              <div className="max-w-3xl mx-auto space-y-4">
+                {/* Game Control Bar */}
+                {canControl && (
+                  <div className="flex justify-between items-center bg-slate-800 p-2 rounded-xl border border-slate-700 mx-1">
+                    <div className="flex items-center gap-3 pl-2">
+                      <div className={`text-2xl font-mono font-bold w-20 text-center bg-black/40 rounded p-1 transition-colors ${gameTimer > periodDuration * 60 ? 'text-red-500 animate-pulse' : 'text-emerald-400'}`}>
+                        {formatTime(gameTimer)}
+                      </div>
+                      <div className="text-xs font-bold text-slate-400 uppercase">
+                        {matchPeriod === '1T' ? '1º Tempo' : matchPeriod === '2T' ? '2º Tempo' : matchPeriod === 'INT' ? 'Intervalo' : 'Fim'}
+                        {gameTimer > periodDuration * 60 && <span className="block text-[10px] text-red-500 font-extrabold animate-pulse">ACRÉSCIMO</span>}
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      {!isTimerRunning && matchPeriod === '1T' && gameTimer === 0 ? (
+                        <button onClick={() => handleGameControl('START')} className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-lg flex items-center gap-2 text-xs font-bold">
+                          <Play size={16} fill="white" /> Iniciar Partida
+                        </button>
+                      ) : (
+                        <>
+                          {isTimerRunning ? (
+                            <button onClick={() => handleGameControl('PAUSE')} className="bg-yellow-600 hover:bg-yellow-500 text-white p-2 rounded-lg text-xs font-bold" title="Pausar">
+                              <Pause size={16} fill="white" />
+                            </button>
+                          ) : (
+                            matchPeriod !== 'FIM' && <button onClick={() => handleGameControl('RESUME')} className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-lg text-xs font-bold" title="Retomar">
+                              <Play size={16} fill="white" />
+                            </button>
+                          )}
+
+                          {matchPeriod === '1T' && (
+                            <button onClick={() => handleGameControl('NEXT_PERIOD')} className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-lg text-xs font-bold whitespace-nowrap">
+                              Encerrar 1ºT
+                            </button>
+                          )}
+
+                          {matchPeriod === 'INT' && (
+                            <button onClick={() => handleGameControl('NEXT_PERIOD')} className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-lg text-xs font-bold whitespace-nowrap">
+                              Iniciar 2ºT
+                            </button>
+                          )}
+
+                          {(matchPeriod === '2T' || matchPeriod === 'INT') && (
+                            <button onClick={() => handleGameControl('END_GAME')} className="bg-red-600 hover:bg-red-500 text-white p-2 rounded-lg text-xs font-bold whitespace-nowrap">
+                              Encerrar Jogo
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Event Buttons - Compact Grid */}
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+                  <button onClick={() => handleConsoleAction(MatchEventType.GOAL)} className={`${actionBtnBase} bg-emerald-600 hover:bg-emerald-500 text-white`}>
+                    <Goal size={20} /> <span className="text-[10px] font-bold mt-1">GOL</span>
+                  </button>
+                  <button onClick={() => handleConsoleAction(MatchEventType.YELLOW_CARD)} className={`${actionBtnBase} bg-yellow-400 hover:bg-yellow-300 text-slate-900`}>
+                    <ShieldAlert size={20} /> <span className="text-[10px] font-bold mt-1">AMARELO</span>
+                  </button>
+                  <button onClick={() => handleConsoleAction(MatchEventType.RED_CARD)} className={`${actionBtnBase} bg-red-600 hover:bg-red-500 text-white`}>
+                    <ShieldAlert size={20} /> <span className="text-[10px] font-bold mt-1">VERMELHO</span>
+                  </button>
+                  <button onClick={() => handleConsoleAction(MatchEventType.FOUL)} className={`${actionBtnBase} bg-slate-700 hover:bg-slate-600 text-white`}>
+                    <X size={20} /> <span className="text-[10px] font-bold mt-1">FALTA</span>
+                  </button>
+                  <button onClick={() => handleConsoleAction(MatchEventType.CORNER)} className={`${actionBtnBase} bg-blue-600 hover:bg-blue-500 text-white`}>
+                    <CornerUpRight size={20} /> <span className="text-[10px] font-bold mt-1">ESCANT.</span>
+                  </button>
+                  <button onClick={() => handleConsoleAction(MatchEventType.OFFSIDE)} className={`${actionBtnBase} bg-slate-600 hover:bg-slate-500 text-white`}>
+                    <Flag size={20} /> <span className="text-[10px] font-bold mt-1">IMPED.</span>
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="max-w-xl mx-auto text-white">
@@ -241,37 +356,83 @@ const MatchDetailView: React.FC<MatchDetailViewProps> = ({
     <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col animate-in slide-in-from-bottom duration-300">
       <div className="bg-slate-900 text-white p-4 shadow-md flex-shrink-0">
         <div className="max-w-3xl mx-auto">
-          <button onClick={onClose} className="mb-4 text-slate-400 hover:text-white flex items-center gap-2 transition">
-            <X size={20} /> Fechar
-          </button>
+          <div className="flex justify-between items-start mb-4">
+            <button onClick={onClose} className="text-slate-400 hover:text-white flex items-center gap-2 transition text-sm font-bold">
+              <X size={18} /> Fechar
+            </button>
 
-          <div className="flex justify-between items-center mb-6">
-            <div className="flex flex-col items-center w-1/3">
-              <div className="w-16 h-16 rounded-full flex items-center justify-center font-bold text-2xl shadow-lg border-2 border-slate-700 mb-2" style={{ backgroundColor: homeTeam.logoColor }}>
-                {homeTeam.shortName}
-              </div>
-              <h3 className="font-bold text-center leading-tight">{homeTeam.name}</h3>
-            </div>
-
-            <div className="flex flex-col items-center w-1/3">
-              <div className="text-5xl font-bold font-mono tracking-widest mb-1 flex gap-2">
-                <span>{match.homeScore}</span>
-                <span className="text-slate-600">:</span>
-                <span>{match.awayScore}</span>
-              </div>
-              <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${match.status === MatchStatus.LIVE ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-700 text-slate-300'}`}>
-                {match.status === MatchStatus.LIVE ? 'Ao Vivo' : match.status === MatchStatus.FINISHED ? 'Fim de Jogo' : 'Agendado'}
-              </span>
-              <span className="text-slate-400 text-xs mt-2">{arena ? arena.name : match.arenaId}</span>
-            </div>
-
-            <div className="flex flex-col items-center w-1/3">
-              <div className="w-16 h-16 rounded-full flex items-center justify-center font-bold text-2xl shadow-lg border-2 border-slate-700 mb-2" style={{ backgroundColor: awayTeam.logoColor }}>
-                {awayTeam.shortName}
-              </div>
-              <h3 className="font-bold text-center leading-tight">{awayTeam.name}</h3>
-            </div>
+            <button
+              onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
+              className="text-slate-400 hover:text-white flex items-center gap-1 transition text-xs font-bold bg-slate-800 px-3 py-1 rounded-full"
+            >
+              {isHeaderCollapsed ? (
+                <> <ChevronDown size={14} /> Expandir Placar </>
+              ) : (
+                <> <ChevronUp size={14} /> Compactar </>
+              )}
+            </button>
           </div>
+
+          {!isHeaderCollapsed ? (
+            <div className="flex justify-between items-center mb-6 animate-in slide-in-from-top-2 duration-300">
+              <div className="flex flex-col items-center w-1/3">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center font-bold text-2xl shadow-lg border-2 border-slate-700 mb-2 overflow-hidden" style={{ backgroundColor: homeTeam.logoColor }}>
+                  {homeTeam.profilePicture ? (
+                    <img src={homeTeam.profilePicture} alt={homeTeam.shortName.toUpperCase()} className="w-full h-full object-cover" />
+                  ) : homeTeam.shortName.toUpperCase()}
+                </div>
+                <h3 className="font-bold text-center leading-tight text-lg">{homeTeam.name}</h3>
+              </div>
+
+              <div className="flex flex-col items-center w-1/3">
+                <div className="text-5xl font-bold font-mono tracking-widest mb-1 flex gap-2">
+                  <span>{match.homeScore}</span>
+                  <span className="text-slate-600">:</span>
+                  <span>{match.awayScore}</span>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${match.status === MatchStatus.LIVE ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-700 text-slate-300'}`}>
+                  {match.status === MatchStatus.LIVE ? 'Ao Vivo' : match.status === MatchStatus.FINISHED ? 'Fim de Jogo' : 'Agendado'}
+                </span>
+                <span className="text-slate-400 text-xs mt-2 flex items-center gap-1"><MapPin size={10} /> {arena ? arena.name : match.arenaId}</span>
+              </div>
+
+              <div className="flex flex-col items-center w-1/3">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center font-bold text-2xl shadow-lg border-2 border-slate-700 mb-2 overflow-hidden" style={{ backgroundColor: awayTeam.logoColor }}>
+                  {awayTeam.profilePicture ? (
+                    <img src={awayTeam.profilePicture} alt={awayTeam.shortName.toUpperCase()} className="w-full h-full object-cover" />
+                  ) : awayTeam.shortName.toUpperCase()}
+                </div>
+                <h3 className="font-bold text-center leading-tight text-lg">{awayTeam.name}</h3>
+              </div>
+            </div>
+          ) : (
+            <div className="flex justify-between items-center mb-4 px-4 py-2 bg-slate-800 rounded-xl animate-in fade-in duration-300">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border border-slate-600 overflow-hidden" style={{ backgroundColor: homeTeam.logoColor }}>
+                  {homeTeam.profilePicture ? (
+                    <img src={homeTeam.profilePicture} alt={homeTeam.shortName.toUpperCase()} className="w-full h-full object-cover" />
+                  ) : homeTeam.shortName.toUpperCase()}
+                </div>
+                <span className="font-bold text-xl">{match.homeScore}</span>
+              </div>
+
+              <div className="flex flex-col items-center">
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${match.status === MatchStatus.LIVE ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
+                  {match.status === MatchStatus.LIVE ? 'Ao Vivo' : 'Fim'}
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono mt-0.5">{eventMinute > 0 ? `${eventMinute}'` : ''}</span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="font-bold text-xl">{match.awayScore}</span>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border border-slate-600 overflow-hidden" style={{ backgroundColor: awayTeam.logoColor }}>
+                  {awayTeam.profilePicture ? (
+                    <img src={awayTeam.profilePicture} alt={awayTeam.shortName.toUpperCase()} className="w-full h-full object-cover" />
+                  ) : awayTeam.shortName.toUpperCase()}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex border-b border-slate-700 overflow-x-auto">
             <button onClick={() => setActiveTab('TIMELINE')} className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === 'TIMELINE' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>Timeline</button>
@@ -521,6 +682,7 @@ const MatchDetailView: React.FC<MatchDetailViewProps> = ({
                         team={teamWithTactics}
                         isEditable={isCoachOfViewingTeam}
                         onSave={(newPos) => onSaveMatchTactics(match.id, viewingTeam.id, newPos)}
+                        onPlayerClick={(player) => onViewPlayer(player, viewingTeam.name)}
                       />
 
                       {/* Basic List View Fallback/Addition */}

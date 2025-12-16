@@ -12,10 +12,10 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ teams, matches, onTeamC
   // Recalculate standings based on matches (in a real app, this might be stored in DB, but we compute on fly)
   const computedTeams = useMemo(() => {
     // Clone teams to avoid mutating props directly
-    const newTeams = teams.map(t => ({ 
-      ...t, 
-      wins: 0, draws: 0, losses: 0, 
-      goalsFor: 0, goalsAgainst: 0, points: 0 
+    const newTeams = teams.map(t => ({
+      ...t,
+      wins: 0, draws: 0, losses: 0,
+      goalsFor: 0, goalsAgainst: 0, points: 0
     }));
 
     matches.forEach(match => {
@@ -83,14 +83,20 @@ const StandingsTable: React.FC<StandingsTableProps> = ({ teams, matches, onTeamC
             {computedTeams.map((team, index) => (
               <tr key={team.id} className="bg-white border-b hover:bg-gray-50 transition-colors">
                 <td className="px-4 py-3 font-medium text-gray-900">{index + 1}º</td>
-                <td 
+                <td
                   className={`px-4 py-3 font-medium text-gray-900 flex items-center gap-2 ${onTeamClick ? 'cursor-pointer hover:text-emerald-600' : ''}`}
                   onClick={() => onTeamClick && onTeamClick(team.id)}
                 >
-                  <span 
-                    className="w-3 h-3 rounded-full" 
-                    style={{ backgroundColor: team.logoColor }}
-                  ></span>
+                  {team.profilePicture ? (
+                    <img src={team.profilePicture} alt={team.shortName} className="w-6 h-6 rounded-full object-cover border border-slate-200" />
+                  ) : (
+                    <span
+                      className="w-6 h-6 rounded-full flex items-center justify-center text-[8px] text-white font-bold"
+                      style={{ backgroundColor: team.logoColor }}
+                    >
+                      {team.shortName.substring(0, 2).toUpperCase()}
+                    </span>
+                  )}
                   {team.name}
                 </td>
                 <td className="px-4 py-3 text-center font-bold text-emerald-600">{team.points}</td>

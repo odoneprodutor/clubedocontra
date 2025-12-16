@@ -85,9 +85,9 @@ const MatchCard: React.FC<MatchCardProps> = ({
           >
             <div className="relative">
               <div className="w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg group-hover/team:scale-110 transition-transform duration-300 border-2 border-white dark:border-slate-700 overflow-hidden" style={{ backgroundColor: homeTeam.logoColor }}>
-                {homeTeam.logo ? (
-                  <img src={homeTeam.logo} alt={homeTeam.shortName} className="w-full h-full object-cover" />
-                ) : homeTeam.shortName}
+                {homeTeam.profilePicture ? (
+                  <img src={homeTeam.profilePicture} alt={homeTeam.shortName.toUpperCase()} className="w-full h-full object-cover" />
+                ) : homeTeam.shortName.toUpperCase()}
               </div>
               {match.status === MatchStatus.LIVE && match.homeScore > match.awayScore && (
                 <div className="absolute -top-1 -right-1 bg-amber-400 rounded-full p-0.5 border border-white"><Trophy size={10} className="text-white" /></div>
@@ -137,9 +137,9 @@ const MatchCard: React.FC<MatchCardProps> = ({
           >
             <div className="relative">
               <div className="w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-lg group-hover/team:scale-110 transition-transform duration-300 border-2 border-white dark:border-slate-700 overflow-hidden" style={{ backgroundColor: awayTeam.logoColor }}>
-                {awayTeam.logo ? (
-                  <img src={awayTeam.logo} alt={awayTeam.shortName} className="w-full h-full object-cover" />
-                ) : awayTeam.shortName}
+                {awayTeam.profilePicture ? (
+                  <img src={awayTeam.profilePicture} alt={awayTeam.shortName.toUpperCase()} className="w-full h-full object-cover" />
+                ) : awayTeam.shortName.toUpperCase()}
               </div>
               {match.status === MatchStatus.LIVE && match.awayScore > match.homeScore && (
                 <div className="absolute -top-1 -right-1 bg-amber-400 rounded-full p-0.5 border border-white"><Trophy size={10} className="text-white" /></div>
