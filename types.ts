@@ -58,8 +58,9 @@ export interface Player {
   id: string;
   name: string;
   number: number;
-  position: 'GK' | 'DEF' | 'MID' | 'FWD' | 'Curinga'; // Added Curinga
+  position: 'GK' | 'CB' | 'LB' | 'RB' | 'LWB' | 'RWB' | 'CDM' | 'CM' | 'CAM' | 'LM' | 'RM' | 'LW' | 'RW' | 'CF' | 'ST' | 'Curinga';
   stats: PlayerStats;
+  isInjured?: boolean; // New: Injury Status
   userId?: string; // Link to user account
 }
 

@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Tournament, Match, Team, NewsItem, UserRole, MatchStatus, MatchType, MatchEventType, Arena, CurrentUser, SportType } from '../types';
-import { AIService } from '../services/gemini';
+import { AIService } from '../services/aiService';
 import { ArrowLeft, ChevronLeft, ChevronRight, Trophy, Calendar, Medal, Newspaper, Target, Users, UserPlus, X, Edit, Trash2, Save, MapPin, Copy, Sparkles, Loader } from 'lucide-react';
 import { SPORT_TYPE_DETAILS } from '../constants';
 import MatchCard from './MatchCard';

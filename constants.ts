@@ -25,7 +25,7 @@ export const INITIAL_TEAMS: Team[] = [];
 // 3. USERS (Keep one Director user to allow login/creation of data initially)
 export const MOCK_USERS: UserAccount[] = [{
   id: 'user-admin',
-  email: 'admin@locallegends.com',
+  email: 'admin@clubedocontra.com',
   password: 'admin',
   name: 'Administrador',
   role: UserRole.DIRECTOR,

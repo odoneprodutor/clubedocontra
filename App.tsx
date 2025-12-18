@@ -2,8 +2,8 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Users, Trophy, Calendar, Shield, Crown, Menu, X, Plus, CheckCircle, MapPin,
   Home, Newspaper, Layout, Map, ArrowLeft, Filter, Save, Trash2, User, Activity,
-  MessageCircle, Settings, LogOut, Bell, Heart, UserPlus, Lock, ChevronDown, ChevronUp, AlertTriangle, Mail, Key,
-  Camera, Briefcase, Target, Grid, List as ListIcon, Play, Video, Image as ImageIcon
+  MessageCircle, Settings, LogOut, Bell, Heart, UserPlus, Lock, ChevronDown, ChevronUp, ChevronRight, AlertTriangle, Mail, Key,
+  Camera, Briefcase, Target, Grid, List as ListIcon, Play, Video, Image as ImageIcon, Award
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import {
@@ -13,6 +13,10 @@ import {
   INITIAL_ARENAS, INITIAL_MATCHES, INITIAL_TEAMS, INITIAL_TOURNAMENTS, MOCK_NEWS, ROLE_DESCRIPTIONS, DEFAULT_DIRECTOR_ID, INITIAL_NOTIFICATIONS, INITIAL_SOCIAL, MOCK_USERS, SAFE_TEAM, SPORT_TYPE_DETAILS
 } from './constants';
 
+import { generateUUID, uploadImage, extractYoutubeId } from './utils/helpers';
+import { useAuth } from './hooks/useAuth';
+import { CitySelect } from './components/CitySelect';
+import { LoginScreen } from './components/LoginScreen';
 import MatchCard from './components/MatchCard';
 import StandingsTable from './components/StandingsTable';
 import TacticsBoard from './components/TacticsBoard';
@@ -21,6 +25,7 @@ import TournamentDetailView from './components/TournamentDetailView';
 import UserProfileView from './components/UserProfileView';
 import ArenasMapView from './components/ArenasMapView';
 import ArenaDetailView from './components/ArenaDetailView';
+import { RosterManager } from './components/RosterManager';
 
 // --- Safe Fallback Objects (Prevents crash when data is empty) ---
 const SAFE_ARENA: Arena = {
@@ -35,480 +40,31 @@ const SAFE_ARENA: Arena = {
 // Replaced Lottie with pure CSS animation for robustness
 const PageTransition = () => {
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-xl animate-in fade-in duration-300">
-      <div className="relative">
-        <div className="w-24 h-24 rounded-full border-4 border-emerald-200 border-t-emerald-600 animate-spin"></div>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Trophy size={32} className="text-emerald-600 animate-bounce" />
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/90 dark:bg-slate-950/90 backdrop-blur-xl animate-in fade-in duration-300">
+      <div className="relative group">
+        <div className="absolute -inset-4 bg-gradient-to-tr from-emerald-400 to-teal-500 rounded-full opacity-20 blur-xl animate-pulse"></div>
+        <div className="relative w-32 h-32 flex items-center justify-center">
+          <img
+            src="/loading_logo.png"
+            alt="Loading"
+            className="w-full h-full object-contain animate-bounce transition-transform"
+          />
         </div>
       </div>
-      <p className="mt-4 text-emerald-800 font-bold tracking-widest animate-pulse">CARREGANDO...</p>
+      <p className="mt-8 text-emerald-800 dark:text-emerald-400 font-black tracking-[0.2em] text-sm animate-pulse uppercase">Carregando</p>
     </div>
   );
 };
 
-// --- HELPER: File to Base64 ---
-const fileToBase64 = (file: File): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = error => reject(error);
-  });
-};
-
-// --- HELPER: UUID Generator ---
-const generateUUID = () => {
-  // @ts-ignore
-  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-    var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-};
-
-// --- HELPER: Upload Image to Supabase Storage ---
-const uploadImage = async (file: File): Promise<string | null> => {
-  try {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
-    const filePath = `public/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage.from('images').upload(filePath, file);
-
-    if (uploadError) {
-      throw uploadError;
-    }
-
-    const { data } = supabase.storage.from('images').getPublicUrl(filePath);
-    return data.publicUrl;
-  } catch (error) {
-    console.error('Error uploading image:', error);
-    alert('Erro ao fazer upload da imagem. Tente novamente.');
-    return null;
-  }
-};
-
-// --- HELPER: Location Hook (IBGE API) ---
-const useLocationData = () => {
-  const [states, setStates] = useState<{ id: number; sigla: string; nome: string }[]>([]);
-  const [cities, setCities] = useState<{ id: number; nome: string }[]>([]);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    fetch('https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome')
-      .then(res => res.json())
-      .then(data => setStates(data))
-      .catch(err => console.error("Error fetching states:", err));
-  }, []);
-
-  const fetchCitiesForState = async (uf: string) => {
-    if (!uf) { setCities([]); return; }
-    setLoading(true);
-    try {
-      const res = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${uf}/municipios?orderBy=nome`);
-      const data = await res.json();
-      setCities(data);
-    } catch (err) {
-      console.error("Error fetching cities:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return { states, cities, fetchCitiesForState, loading };
-};
-
-// --- COMPONENT: City Select ---
-interface CitySelectProps {
-  value?: string;
-  onChange?: (value: string) => void; // Made Optional
-  className?: string;
-  required?: boolean;
-  name?: string;
-}
-
-const CitySelect: React.FC<CitySelectProps> = ({ value, onChange, className, required, name }) => {
-  const { states, cities, fetchCitiesForState, loading } = useLocationData();
-  const [selectedState, setSelectedState] = useState('');
-  const [selectedCity, setSelectedCity] = useState('');
-
-  // Parse initial value (Format: "City - UF" or just "City")
-  useEffect(() => {
-    if (value && value.includes(' - ')) {
-      const [c, s] = value.split(' - ');
-      if (s !== selectedState) {
-        setSelectedState(s);
-        fetchCitiesForState(s);
-      }
-      setSelectedCity(c);
-    }
-  }, [value]); // careful with dependency loop
-
-  const handleStateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const uf = e.target.value;
-    setSelectedState(uf);
-    setSelectedCity('');
-    if (onChange) onChange(''); // safe call
-    fetchCitiesForState(uf);
-  };
-
-  const handleCityChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const city = e.target.value;
-    setSelectedCity(city);
-    if (onChange) {
-      if (city && selectedState) {
-        onChange(`${city} - ${selectedState}`);
-      } else {
-        onChange(city);
-      }
-    }
-  };
-
-  return (
-    <div className={`grid grid-cols-3 gap-2 ${className}`}>
-      <input type="hidden" name={name} value={selectedCity && selectedState ? `${selectedCity} - ${selectedState}` : ''} />
-      <div className="col-span-1">
-        <select
-          className="w-full py-3 px-0 text-center bg-slate-50 dark:bg-slate-800 dark:border-slate-700 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition appearance-none"
-          value={selectedState}
-          onChange={handleStateChange}
-          required={required}
-          style={{ textAlignLast: 'center' }} // Force center alignment for options in some browsers
-        >
-          <option value="">UF</option>
-          {states.map(s => <option key={s.id} value={s.sigla}>{s.sigla}</option>)}
-        </select>
-      </div>
-      <div className="col-span-2 relative">
-        <select
-          className="w-full p-3 bg-slate-50 dark:bg-slate-800 dark:border-slate-700 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none transition disabled:opacity-50"
-          value={selectedCity}
-          onChange={handleCityChange}
-          required={required}
-          disabled={!selectedState || loading}
-        >
-          <option value="">{loading ? 'Carregando...' : 'Cidade'}</option>
-          {cities.map(c => <option key={c.id} value={c.nome}>{c.nome}</option>)}
-        </select>
-      </div>
-    </div>
-  );
-};
-
-// --- Login & Registration Screen Component ---
-interface LoginScreenProps {
-  users: UserAccount[];
-  teams: Team[];
-  onLogin: (user: UserAccount) => void;
-  onRegister: (newUser: UserAccount) => void;
-}
-
-const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin, onRegister }) => {
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [location, setLocation] = useState('');
-  const [role, setRole] = useState<UserRole>(UserRole.FAN);
-  const [selectedTeamId, setSelectedTeamId] = useState<string>('');
-  const [avatar, setAvatar] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    if (isRegistering) {
-      // Registration Logic
-      if (!name || !email || !password) {
-        setError("Por favor, preencha todos os campos obrigatórios.");
-        return;
-      }
-
-      const emailExists = users.some(u => u.email === email);
-      if (emailExists) {
-        setError("Este email já está cadastrado.");
-        return;
-      }
-
-      // Validate Team Selection
-      if ((role === UserRole.COACH || role === UserRole.PLAYER || role === UserRole.FAN) && !selectedTeamId) {
-        if (teams.length === 0) {
-          setError("Não existem times cadastrados. Registre-se como DIRETOR primeiro para criar um time.");
-          return;
-        }
-        setError("Por favor, selecione um time.");
-        return;
-      }
-
-      const newUser: UserAccount = {
-        id: self.crypto.randomUUID(),
-        email,
-        password,
-        name,
-        role,
-        location: location || 'Desconhecida',
-        avatar: avatar || undefined, // Include avatar
-        teamId: (role === UserRole.COACH || role === UserRole.PLAYER || role === UserRole.FAN) && selectedTeamId ? selectedTeamId : null
-      };
-
-      onRegister(newUser);
-      onLogin(newUser); // Auto login after register
-    } else {
-      // Login Logic
-      const user = users.find(u => u.email === email && u.password === password);
-      if (user) {
-        onLogin(user);
-      } else {
-        setError("Email ou senha incorretos.");
-      }
-    }
-  };
-
-  const needsTeamSelection = role === UserRole.COACH || role === UserRole.PLAYER || role === UserRole.FAN;
-
-  return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Dynamic Background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-emerald-900 to-slate-900 z-0"></div>
-      <div className="blob blob-1"></div>
-      <div className="blob blob-2"></div>
-
-      <div className="max-w-4xl w-full glass-panel-dark rounded-3xl shadow-2xl overflow-hidden flex flex-col md:flex-row relative z-10 animate-in zoom-in-95 duration-500">
-
-        {/* Brand Side */}
-        <div className="md:w-1/2 p-12 text-white flex flex-col justify-between relative overflow-hidden bg-gradient-to-br from-emerald-600/80 to-teal-800/80 backdrop-blur-md">
-          <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-md shadow-inner border border-white/20">
-                <Trophy size={36} className="text-white drop-shadow-md icon-hover" />
-              </div>
-              <h1 className="text-4xl font-black tracking-tight drop-shadow-lg">LocalLegends</h1>
-            </div>
-            <p className="text-emerald-50 text-lg leading-relaxed mb-8 font-light">
-              Eleve o nível do seu jogo. A plataforma definitiva para gestão esportiva.
-            </p>
-          </div>
-
-          <div className="relative z-10 space-y-4">
-            <div className="flex -space-x-3">
-              {[1, 2, 3, 4].map(i => (
-                <div key={i} className="w-10 h-10 rounded-full border-2 border-emerald-600 bg-slate-200 shadow-md">
-                  <img src={`https://i.pravatar.cc/150?u=${i + 20}`} alt="" className="w-full h-full rounded-full" />
-                </div>
-              ))}
-              <div className="w-10 h-10 rounded-full border-2 border-emerald-600 bg-white flex items-center justify-center text-xs font-bold text-emerald-800 shadow-md">+10k</div>
-            </div>
-            <p className="text-sm text-emerald-100/80 font-medium">Junte-se a milhares de atletas e diretores.</p>
-          </div>
-
-          {/* Decorative Circles */}
-          <div className="absolute -top-20 -right-20 w-64 h-64 bg-white/10 rounded-full blur-3xl"></div>
-          <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-black/20 rounded-full blur-3xl"></div>
-        </div>
-
-        {/* Form Side */}
-        <div className="md:w-1/2 p-12 flex flex-col justify-center bg-white/90 backdrop-blur-xl relative">
-          <div className="max-w-sm w-full mx-auto">
-            <h2 className="text-3xl font-bold text-slate-800 mb-2">
-              {isRegistering ? 'Criar Conta' : 'Bem-vindo'}
-            </h2>
-            <p className="text-slate-500 mb-8 text-sm">
-              {isRegistering ? 'Preencha seus dados para começar.' : 'Entre com suas credenciais para continuar.'}
-            </p>
-
-            {error && (
-              <div className="mb-6 p-4 bg-red-50/80 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-3 backdrop-blur-sm animate-pulse">
-                <AlertTriangle size={18} /> {error}
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-5">
-              {isRegistering && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Nome Completo</label>
-                  <div className="relative group">
-                    <User className="absolute left-3 top-3 text-slate-400 group-hover:text-emerald-500 transition-colors" size={18} />
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all text-sm shadow-inner input-focus-effect"
-                      placeholder="Seu nome"
-                      required
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Email</label>
-                <div className="relative group">
-                  <Mail className="absolute left-3 top-3 text-slate-400 group-hover:text-emerald-500 transition-colors" size={18} />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all text-sm shadow-inner input-focus-effect"
-                    placeholder="seu@email.com"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Senha</label>
-                <div className="relative group">
-                  <Key className="absolute left-3 top-3 text-slate-400 group-hover:text-emerald-500 transition-colors" size={18} />
-                  <input
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all text-sm shadow-inner input-focus-effect"
-                    placeholder="******"
-                    required
-                  />
-                </div>
-              </div>
-
-              {isRegistering && (
-                <>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Sua Cidade</label>
-                    <div className="relative group p-1 bg-slate-50 border border-slate-200 rounded-xl">
-                      <CitySelect value={location} onChange={setLocation} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Avatar (Foto)</label>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const url = await uploadImage(file);
-                          if (url) {
-                            setAvatar(url);
-                          }
-                        }
-                      }}
-                      className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Tipo de Conta</label>
-                    <select
-                      value={role}
-                      onChange={(e) => setRole(e.target.value as UserRole)}
-                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 transition text-sm cursor-pointer input-focus-effect"
-                    >
-                      <option value={UserRole.FAN}>Torcedor</option>
-                      <option value={UserRole.PLAYER}>Jogador</option>
-                      <option value={UserRole.COACH}>Técnico</option>
-                      <option value={UserRole.DIRECTOR}>Diretor Esportivo</option>
-                      <option value={UserRole.REFEREE}>Árbitro</option>
-                    </select>
-                  </div>
-
-                  {needsTeamSelection && (
-                    <div className="animate-in fade-in slide-in-from-top-2">
-                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">
-                        {role === UserRole.FAN ? 'Time do Coração' : 'Time'}
-                      </label>
-                      {teams.length > 0 ? (
-                        <div className="relative">
-                          <select
-                            value={selectedTeamId}
-                            onChange={(e) => setSelectedTeamId(e.target.value)}
-                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 transition text-sm cursor-pointer input-focus-effect"
-                            required
-                          >
-                            <option value="">Selecione um time...</option>
-                            {teams.map(t => (
-                              <option key={t.id} value={t.id}>{t.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : (
-                        <div className="text-xs text-red-500 bg-red-50 p-3 rounded-lg border border-red-100">
-                          Nenhum time disponível. Registre-se como <strong>Diretor</strong> primeiro para criar um time.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-
-              <button
-                type="submit"
-                className="btn-feedback w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-emerald-200 mt-6 tracking-wide text-sm uppercase"
-              >
-                {isRegistering ? 'Cadastrar' : 'Entrar'}
-              </button>
-            </form>
-
-            <div className="mt-8 text-center">
-              <p className="text-xs text-slate-400 mb-2">
-                {isRegistering ? 'Já tem uma conta?' : 'Ainda não tem conta?'}
-              </p>
-              <button
-                onClick={() => { setIsRegistering(!isRegistering); setError(null); }}
-                className="text-emerald-600 font-bold text-sm hover:text-emerald-700 transition btn-feedback"
-              >
-                {isRegistering ? 'Fazer Login' : 'Criar Conta Grátis'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// --- HELPER: Persistent State Hook ---
-const usePersistentState = <T,>(key: string, initialValue: T) => {
-  const [state, setState] = useState<T>(() => {
-    try {
-      const saved = localStorage.getItem(key);
-      return saved ? JSON.parse(saved) : initialValue;
-    } catch (e) {
-      console.error("Error loading state from localStorage", e);
-      return initialValue;
-    }
-  });
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(key, JSON.stringify(state));
-    } catch (e) {
-      console.error("Error saving state to localStorage", e);
-    }
-  }, [key, state]);
-
-  return [state, setState] as const;
-};
 
 const App: React.FC = () => {
-  // --- Dark Mode ---
-  const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
-  useEffect(() => {
-    const root = window.document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-  const toggleTheme = () => setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  // --- Hooks ---
+  const {
+    theme, toggleTheme, currentUser, setCurrentUser,
+    handleLogin: authLogin, handleLogout: authLogout, handleUpdateProfile: authUpdateProfile
+  } = useAuth();
 
   // --- Global State ---
-  // --- GLOBAL STATE ---
-  // Replaced usePersistentState with useState + Supabase Fetch
   const [userAccounts, setUserAccounts] = useState<UserAccount[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [matches, setMatches] = useState<Match[]>([]);
@@ -522,25 +78,6 @@ const App: React.FC = () => {
 
   // Loading State
   const [isLoadingData, setIsLoadingData] = useState(true);
-
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(() => {
-    try {
-      const saved = localStorage.getItem('currentUser');
-      return saved ? JSON.parse(saved) : null;
-    } catch (e) {
-      return null;
-    }
-  });
-
-  // Session Persistence
-  useEffect(() => {
-    if (currentUser) {
-      localStorage.setItem('currentUser', JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem('currentUser');
-    }
-  }, [currentUser]);
-
   const [currentView, setCurrentView] = useState<AppView>('HOME');
   const [isLoading, setIsLoading] = useState(false); // Transition state
   const [editingTeam, setEditingTeam] = useState<Team | null>(null); // New state for editing team
@@ -580,8 +117,38 @@ const App: React.FC = () => {
     fetchData();
   }, []);
 
+  // --- Automatic Cleanup of Orphaned Evaluations ---
+  useEffect(() => {
+    const cleanupOrphanedEvaluations = async () => {
+      if (!isLoadingData && evaluations.length > 0 && teams.length > 0) {
+        // Collect all player IDs from all active (non-deleted) teams
+        const activePlayerIds = new Set<string>();
+        teams.filter(t => !t.isDeleted).forEach(t => {
+          t.roster.forEach(p => activePlayerIds.add(p.id));
+        });
 
+        // Find evaluations for players that are not in any active roster
+        const orphaned = evaluations.filter(ev => !activePlayerIds.has(ev.playerId));
 
+        if (orphaned.length > 0) {
+          console.log(`DEBUG: Found ${orphaned.length} orphaned evaluations. Cleaning up...`);
+          const orphanedIds = orphaned.map(ev => ev.id);
+
+          const { error } = await supabase.from('player_evaluations').delete().in('id', orphanedIds);
+
+          if (!error) {
+            // Update local state by removing deleted evals
+            setEvaluations(prev => prev.filter(ev => !orphanedIds.includes(ev.id)));
+            console.log("DEBUG: Orphaned evaluations removed successfully from DB and local state.");
+          } else {
+            console.error("DEBUG: Failed to delete orphaned evaluations:", error);
+          }
+        }
+      }
+    };
+
+    cleanupOrphanedEvaluations();
+  }, [isLoadingData, teams, evaluations.length]);
 
   // --- Player Evaluation State ---
   const [isEvaluationModalOpen, setIsEvaluationModalOpen] = useState(false);
@@ -631,6 +198,28 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDeleteEvaluation = async (evaluationId: string) => {
+    const { error } = await supabase.from('player_evaluations').delete().eq('id', evaluationId);
+    if (error) {
+      console.error("Error deleting evaluation:", error);
+      alert("Erro ao excluir avaliação.");
+    } else {
+      setEvaluations(prev => prev.filter(e => e.id !== evaluationId));
+    }
+  };
+
+  const handleResetEvaluations = async (playerId: string) => {
+    const { error } = await supabase.from('player_evaluations').delete().eq('player_id', playerId);
+    if (error) {
+      console.error("Error resetting evaluations:", error);
+      alert("Erro ao zerar histórico.");
+    } else {
+      setEvaluations(prev => prev.filter(e => e.playerId !== playerId));
+      alert("Histórico de avaliações zerado com sucesso!");
+    }
+  };
+
+
   // Navigation / UI State
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null);
   const [selectedArenaId, setSelectedArenaId] = useState<string | null>(null); // New State
@@ -648,6 +237,7 @@ const App: React.FC = () => {
   const [viewingTeamId, setViewingTeamId] = useState<string | null>(null);
   const [isEditingTeam, setIsEditingTeam] = useState(false);
   const [previewTeamData, setPreviewTeamData] = useState<Team | null>(null); // Local Preview State
+  const [isViewingFullRoster, setIsViewingFullRoster] = useState(false); // New State for Full Roster View
 
   // Sync Preview Data when entering edit mode
   useEffect(() => {
@@ -741,20 +331,10 @@ const App: React.FC = () => {
   const handleLogin = (user: UserAccount) => {
     setIsLoading(true);
     setTimeout(() => {
-      setCurrentUser({
-        id: user.id,
-        name: user.name,
-        role: user.role,
-        teamId: user.teamId,
-        email: user.email,
-        location: user.location,
-        avatar: user.avatar
+      authLogin(user, (startView) => {
+        setCurrentView(startView);
+        setIsLoading(false);
       });
-
-      if (user.role === UserRole.DIRECTOR) setCurrentView('HOME');
-      else if (user.role === UserRole.COACH || user.role === UserRole.PLAYER) setCurrentView('TEAMS');
-      else setCurrentView('HOME');
-      setIsLoading(false);
     }, 1000);
   };
 
@@ -778,12 +358,13 @@ const App: React.FC = () => {
   const handleLogout = () => {
     setIsLoading(true);
     setTimeout(() => {
-      setCurrentUser(null);
-      setSelectedMatchId(null);
-      setCurrentView('HOME');
-      setViewingProfileId(null);
-      setHomeFeedTournamentId(null);
-      setIsLoading(false);
+      authLogout(() => {
+        setSelectedMatchId(null);
+        setCurrentView('HOME');
+        setViewingProfileId(null);
+        setHomeFeedTournamentId(null);
+        setIsLoading(false);
+      });
     }, 800);
   };
 
@@ -796,43 +377,21 @@ const App: React.FC = () => {
   };
 
   const handleUpdateProfile = async (updatedUser: UserAccount) => {
-    // 1. Update Local State
+    // 1. Update Local Users State
     setUserAccounts(prev => prev.map(u => u.id === updatedUser.id ? updatedUser : u));
-    if (currentUser && currentUser.id === updatedUser.id) {
-      setCurrentUser(prev => prev ? ({
-        ...prev,
-        name: updatedUser.name,
-        location: updatedUser.location,
-        avatar: updatedUser.avatar,
-        teamId: updatedUser.teamId,
-        role: updatedUser.role
-      }) : null);
-    }
 
-    // 2. Update Supabase
-    const { error } = await supabase.from('users').update({
-      name: updatedUser.name,
-      location: updatedUser.location,
-      avatar: updatedUser.avatar,
-      team_id: updatedUser.teamId
-    }).eq('id', updatedUser.id);
-
-    if (error) {
-      console.error("Error updating profile in DB:", error);
-      alert("Erro ao salvar perfil no banco de dados.");
-    } else {
+    // 2. Update Auth State & DB
+    try {
+      await authUpdateProfile(updatedUser);
       alert("Perfil atualizado com sucesso!");
+    } catch (error) {
+      alert("Erro ao salvar perfil no banco de dados.");
     }
   };
 
   // --- Actions ---
 
   // MATCH CRUD
-  const extractYoutubeId = (url: string) => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-  };
 
 
 
@@ -1054,6 +613,14 @@ const App: React.FC = () => {
         if (teamMatchIds.length > 0) {
           await supabase.from('matches').update({ is_deleted: true }).in('id', teamMatchIds);
         }
+
+        // Cleanup Player Evaluations for the roster
+        const playerIds = team.roster.map(p => p.id);
+        if (playerIds.length > 0) {
+          await supabase.from('player_evaluations').delete().in('player_id', playerIds);
+          setEvaluations(prev => prev.filter(e => !playerIds.includes(e.playerId)));
+        }
+
         await supabase.from('teams').update({ is_deleted: true }).eq('id', id);
 
         // Cleanup Users (Set team_id to null)
@@ -1254,19 +821,28 @@ const App: React.FC = () => {
       // Revert on error would be ideal, but for now simple alert
       return;
     }
-
-    // Also remove link from user account if connected
-    // Find user with this player ID
-    // (This is a bit tricky as we store player ID in user, or user ID in player)
-    // In handleCreateTeam, we stored `userId` in `player`.
-    const playerToRemove = team.roster.find(p => p.id === playerId);
-    // Note: TypeScript might complain if `userId` isn't in Player type yet. 
-    // Wait, Player interface in types.ts DOES NOT have userId. 
-    // In handleCreateTeam (Step 929 line 999), it WAS added: "userId: currentUser.id".
-    // I should check types.ts again. I don't recall seeing userId in Player.
   };
 
-  const applyTacticalPreset = (teamId: string, formation: '4-4-2' | '4-3-3' | '3-5-2') => {
+  const handleUpdateRoster = async (teamId: string, updatedRoster: Player[]) => {
+    try {
+      const { error } = await supabase
+        .from('teams')
+        .update({ roster: updatedRoster })
+        .eq('id', teamId);
+
+      if (error) throw error;
+
+      // Update local state
+      setTeams(prev => prev.map(t =>
+        t.id === teamId ? { ...t, roster: updatedRoster } : t
+      ));
+    } catch (err: any) {
+      console.error('Error updating roster:', err);
+      alert('Erro ao atualizar elenco: ' + err.message);
+    }
+  };
+
+  const applyTacticalPreset = (teamId: string, formation: string) => {
     const team = getTeam(teamId);
     let newPositions: TacticalPosition[] = [];
     const rosterIds = team.roster.map(p => p.id);
@@ -1277,30 +853,85 @@ const App: React.FC = () => {
       if (idx < rosterIds.length) newPositions.push({ playerId: rosterIds[idx], x, y });
     };
 
-    // Always GK at 0
+    // Always GK at (50, 90)
     getPos(0, 50, 90);
 
+    // Soccer & General Large Formations
     if (formation === '4-4-2') {
-      // Def
       getPos(1, 15, 70); getPos(2, 40, 70); getPos(3, 60, 70); getPos(4, 85, 70);
-      // Mid
       getPos(5, 15, 45); getPos(6, 40, 45); getPos(7, 60, 45); getPos(8, 85, 45);
-      // Fwd
       getPos(9, 35, 20); getPos(10, 65, 20);
     } else if (formation === '4-3-3') {
-      // Def
       getPos(1, 15, 70); getPos(2, 40, 70); getPos(3, 60, 70); getPos(4, 85, 70);
-      // Mid
       getPos(5, 50, 50); getPos(6, 30, 40); getPos(7, 70, 40);
-      // Fwd
       getPos(8, 15, 20); getPos(9, 50, 20); getPos(10, 85, 20);
     } else if (formation === '3-5-2') {
-      // Def
       getPos(1, 30, 75); getPos(2, 50, 75); getPos(3, 70, 75);
-      // Mid
       getPos(4, 15, 50); getPos(5, 35, 50); getPos(6, 50, 45); getPos(7, 65, 50); getPos(8, 85, 50);
-      // Fwd
       getPos(9, 40, 20); getPos(10, 60, 20);
+    } else if (formation === '4-2-3-1') {
+      getPos(1, 15, 75); getPos(2, 40, 75); getPos(3, 60, 75); getPos(4, 85, 75);
+      getPos(5, 35, 60); getPos(6, 65, 60);
+      getPos(7, 15, 35); getPos(8, 50, 35); getPos(9, 85, 35);
+      getPos(10, 50, 15);
+    }
+
+    // FUTSAL (5v5)
+    else if (formation === '1-2-1') {
+      getPos(1, 50, 75); // Fixo
+      getPos(2, 20, 50); // Ala Esq
+      getPos(3, 80, 50); // Ala Dir
+      getPos(4, 50, 25); // Pivô
+    } else if (formation === '2-2') {
+      getPos(1, 30, 70); getPos(2, 70, 70);
+      getPos(3, 30, 30); getPos(4, 70, 30);
+    } else if (formation === '3-1') {
+      getPos(1, 20, 70); getPos(2, 50, 70); getPos(3, 80, 70);
+      getPos(4, 50, 30);
+    }
+
+    // FUT7 (7v7)
+    else if (formation === '2-3-1') {
+      getPos(1, 30, 75); getPos(2, 70, 75);
+      getPos(3, 15, 50); getPos(4, 50, 50); getPos(5, 85, 50);
+      getPos(6, 50, 25);
+    } else if (formation === '3-2-1') {
+      getPos(1, 15, 75); getPos(2, 50, 75); getPos(3, 85, 75);
+      getPos(4, 30, 45); getPos(5, 70, 45);
+      getPos(6, 50, 20);
+    } else if (formation === '3-3') {
+      getPos(1, 20, 75); getPos(2, 50, 75); getPos(3, 80, 75);
+      getPos(4, 20, 35); getPos(5, 50, 35); getPos(6, 80, 35);
+    }
+
+    // FUT6 (6v6)
+    else if (formation === '2-2-1') {
+      getPos(1, 30, 75); getPos(2, 70, 75);
+      getPos(3, 30, 45); getPos(4, 70, 45);
+      getPos(5, 50, 20);
+    } else if (formation === '3-1-1') {
+      getPos(1, 15, 75); getPos(2, 50, 75); getPos(3, 85, 75);
+      getPos(4, 50, 45);
+      getPos(5, 50, 20);
+    } else if (formation === '2-1-2') {
+      getPos(1, 30, 75); getPos(2, 70, 75);
+      getPos(3, 50, 50);
+      getPos(4, 30, 25); getPos(5, 70, 25);
+    }
+
+    // FUT8 (8v8)
+    else if (formation === '3-3-1') {
+      getPos(1, 20, 75); getPos(2, 50, 75); getPos(3, 80, 75);
+      getPos(4, 20, 45); getPos(5, 50, 45); getPos(6, 80, 45);
+      getPos(7, 50, 20);
+    } else if (formation === '3-2-2') {
+      getPos(1, 20, 75); getPos(2, 50, 75); getPos(3, 80, 75);
+      getPos(4, 35, 45); getPos(5, 65, 45);
+      getPos(6, 35, 20); getPos(7, 65, 20);
+    } else if (formation === '2-4-1') {
+      getPos(1, 35, 75); getPos(2, 65, 75);
+      getPos(3, 10, 50); getPos(4, 35, 50); getPos(5, 65, 50); getPos(6, 90, 50);
+      getPos(7, 50, 20);
     }
 
     handleSaveTeamTactics(teamId, newPositions);
@@ -2406,12 +2037,15 @@ const App: React.FC = () => {
     // Case 0: Viewing a Specific Team (Detail Page) - Accessible by click
     if (viewingTeamId) {
       const myTeam = getTeam(viewingTeamId);
-      const isMyManagedTeam = (currentUser!.role === UserRole.COACH || currentUser!.role === UserRole.PLAYER) && currentUser!.teamId === viewingTeamId;
+      const isMyManagedTeam = currentUser!.role === UserRole.COACH && currentUser!.teamId === viewingTeamId;
       const isDirectorOwner = currentUser!.role === UserRole.DIRECTOR && (myTeam.createdBy === currentUser!.id || currentUser!.teamId === myTeam.id);
-      const isEditable = (isMyManagedTeam && currentUser!.role === UserRole.COACH) || isDirectorOwner;
+      const isEditable = isMyManagedTeam || isDirectorOwner;
 
-      // Calculate Top Scorers for this team
-      const teamScorers = [...myTeam.roster].sort((a, b) => b.stats.goals - a.stats.goals).slice(0, 5);
+      // Calculate Leaderboards for this team
+      const teamScorers = [...myTeam.roster].filter(p => p.stats.goals > 0).sort((a, b) => b.stats.goals - a.stats.goals).slice(0, 3);
+      const teamAssisters = [...myTeam.roster].filter(p => p.stats.assists > 0).sort((a, b) => b.stats.assists - a.stats.assists).slice(0, 3);
+      const teamYellowCards = [...myTeam.roster].filter(p => p.stats.yellowCards > 0).sort((a, b) => b.stats.yellowCards - a.stats.yellowCards).slice(0, 3);
+      const teamRedCards = [...myTeam.roster].filter(p => p.stats.redCards > 0).sort((a, b) => b.stats.redCards - a.stats.redCards).slice(0, 3);
 
       // Filter Staff
       let staffMembers = userAccounts.filter(u => u.teamId === myTeam.id && (u.role === UserRole.DIRECTOR || u.role === UserRole.COACH));
@@ -2438,6 +2072,29 @@ const App: React.FC = () => {
 
       // Counts
       const fanCount = socialGraph.filter(s => s.targetId === myTeam.id).length;
+
+      // Filter News for this team
+      const teamNews = news.filter(n => n.teamId === myTeam.id).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      if (isViewingFullRoster && myTeam) {
+        return (
+          <div className="p-4 md:p-8 max-w-7xl mx-auto w-full">
+            <RosterManager
+              team={myTeam}
+              isEditable={isEditable}
+              onSaveRoster={(updated) => handleUpdateRoster(myTeam.id, updated)}
+              onBack={() => setIsViewingFullRoster(false)}
+              evaluations={evaluations}
+              onEvaluatePlayer={(p) => {
+                setSelectedPlayerForEvaluation({ player: p, teamId: myTeam.id });
+                setIsEvaluationModalOpen(true);
+              }}
+              onSaveTactics={(pos) => handleSaveTeamTactics(myTeam.id, pos)}
+              onApplyFormation={(form) => applyTacticalPreset(myTeam.id, form)}
+            />
+          </div>
+        );
+      }
 
       return (
         <div className="space-y-8 animate-in fade-in duration-500 pb-20">
@@ -2772,141 +2429,226 @@ const App: React.FC = () => {
 
             {/* RIGHT COL: STATS & TACTICS */}
             <div className="lg:col-span-2 space-y-6">
-              {/* TOP SCORERS */}
-              <div className="glass-panel rounded-3xl p-6 interactive-card">
-                <h3 className="font-bold text-lg mb-6 flex items-center gap-2 text-slate-800 dark:text-white">
-                  <Target size={20} className="text-red-500 icon-hover" /> Artilharia do Time
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {teamScorers.length > 0 ? teamScorers.map((p, idx) => (
-                    <div key={p.id} onClick={() => setSelectedPlayerForProfile({ player: p, teamName: myTeam.name })} className="flex items-center gap-3 p-3 bg-white/60 backdrop-blur rounded-xl border border-slate-100 hover:border-emerald-300 transition cursor-pointer hover:shadow-md btn-feedback">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white text-sm shadow-md overflow-hidden ${idx === 0 ? 'bg-yellow-400' : idx === 1 ? 'bg-slate-400' : idx === 2 ? 'bg-orange-400' : 'bg-slate-200 text-slate-500'}`}>
-                        {(p as any).avatar || (p as any).profilePicture ? (
-                          <img src={(p as any).avatar || (p as any).profilePicture} alt={p.name} className="w-full h-full object-cover" />
-                        ) : idx + 1}
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-bold text-slate-900 text-sm">{p.name}</div>
-                        <div className="text-[10px] text-slate-600 font-bold uppercase">{p.stats.matchesPlayed} Jogos</div>
-                      </div>
-                      <div className="text-xl font-black text-emerald-600">{p.stats.goals}</div>
+              {/* TEAM STATS HIGHLIGHTS */}
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* TOP SCORERS */}
+                  <div className="glass-panel rounded-3xl p-6 hover:shadow-lg transition border border-slate-100 dark:border-slate-800">
+                    <h3 className="font-bold text-base mb-4 flex items-center gap-2 text-slate-800 dark:text-white">
+                      <Target size={18} className="text-red-500" /> Artilharia
+                    </h3>
+                    <div className="space-y-3">
+                      {teamScorers.length > 0 ? teamScorers.map((p, idx) => (
+                        <div key={p.id} onClick={() => setSelectedPlayerForProfile({ player: p, teamName: myTeam.name })} className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer group">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${idx === 0 ? 'bg-yellow-400 text-yellow-900' : 'bg-slate-100 text-slate-500'}`}>{idx + 1}</span>
+                            <span className="font-bold text-sm text-slate-700 dark:text-slate-300 truncate group-hover:text-emerald-600">{p.name}</span>
+                          </div>
+                          <span className="text-lg font-black text-emerald-600">{p.stats.goals}</span>
+                        </div>
+                      )) : (
+                        <div className="text-slate-400 text-xs italic py-2 text-center">Nenhum gol registrado.</div>
+                      )}
                     </div>
-                  )) : (
-                    <div className="col-span-full text-slate-400 text-sm italic">Nenhum gol marcado ainda.</div>
-                  )}
+                  </div>
+
+                  {/* TOP ASSISTERS */}
+                  <div className="glass-panel rounded-3xl p-6 hover:shadow-lg transition border border-slate-100 dark:border-slate-800">
+                    <h3 className="font-bold text-base mb-4 flex items-center gap-2 text-slate-800 dark:text-white">
+                      <Award size={18} className="text-blue-500" /> Assistências
+                    </h3>
+                    <div className="space-y-3">
+                      {teamAssisters.length > 0 ? teamAssisters.map((p, idx) => (
+                        <div key={p.id} onClick={() => setSelectedPlayerForProfile({ player: p, teamName: myTeam.name })} className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer group">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${idx === 0 ? 'bg-blue-400 text-blue-900' : 'bg-slate-100 text-slate-500'}`}>{idx + 1}</span>
+                            <span className="font-bold text-sm text-slate-700 dark:text-slate-300 truncate group-hover:text-blue-600">{p.name}</span>
+                          </div>
+                          <span className="text-lg font-black text-blue-600">{p.stats.assists}</span>
+                        </div>
+                      )) : (
+                        <div className="text-slate-400 text-xs italic py-2 text-center">Nenhuma assistência.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* DISCIPLINE SECTION (Ponto de Atenção) */}
+                <div className="glass-panel rounded-3xl p-6 border-l-4 border-l-amber-500 bg-amber-50/30 dark:bg-amber-900/10">
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800 dark:text-white">
+                      <AlertTriangle size={20} className="text-amber-500" /> Disciplina & Ponto de Atenção
+                    </h3>
+                    <span className="text-[10px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-bold uppercase">Fair Play</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                    {/* Yellow Cards List */}
+                    <div>
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <div className="w-2.5 h-3.5 bg-yellow-400 rounded-sm"></div> Amarelos
+                      </h4>
+                      <div className="space-y-2">
+                        {teamYellowCards.length > 0 ? teamYellowCards.map(p => (
+                          <div key={p.id} className="flex items-center justify-between text-sm">
+                            <span className="text-slate-600 dark:text-slate-400 font-medium truncate max-w-[120px]">{p.name}</span>
+                            <div className="flex items-center gap-1.5 min-w-[30px] justify-end">
+                              <span className="font-bold text-slate-900 dark:text-white">{p.stats.yellowCards}</span>
+                              <div className="w-1.5 h-2.5 bg-yellow-400 rounded-sm opacity-60"></div>
+                            </div>
+                          </div>
+                        )) : (
+                          <div className="text-[10px] text-slate-400 italic">Time disciplinado! Nenhum amarelo.</div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Red Cards List */}
+                    <div>
+                      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <div className="w-2.5 h-3.5 bg-red-500 rounded-sm"></div> Vermelhos
+                      </h4>
+                      <div className="space-y-2">
+                        {teamRedCards.length > 0 ? teamRedCards.map(p => (
+                          <div key={p.id} className="flex items-center justify-between text-sm">
+                            <span className="text-red-600 dark:text-red-400 font-bold truncate max-w-[120px]">{p.name}</span>
+                            <div className="flex items-center gap-1.5 min-w-[30px] justify-end">
+                              <span className="font-bold text-red-600">{p.stats.redCards}</span>
+                              <div className="w-1.5 h-2.5 bg-red-500 rounded-sm shadow-[0_0_5px_rgba(239,68,68,0.5)]"></div>
+                            </div>
+                          </div>
+                        )) : (
+                          <div className="text-[10px] text-slate-400 italic">Limpo! Nenhum vermelho.</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* TACTICS & SQUAD */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* TACTICS BOARD */}
-                <div className="glass-panel rounded-3xl p-6 interactive-card">
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800 dark:text-white">
-                      <Crown size={20} className="text-amber-500 icon-hover" /> Formação
-                    </h3>
-                    {isEditable && (
-                      <div className="flex bg-slate-100 p-1 rounded-lg gap-1 overflow-x-auto max-w-[200px] md:max-w-none custom-scrollbar">
-                        {(function () {
-                          const formations: Record<string, string[]> = {
-                            'FUTSAL': ['1-2-1', '2-2', '3-1', 'GK-PLAY'],
-                            'FUT6': ['2-2-1', '3-1-1', '2-1-2'],
-                            'FUT7': ['2-3-1', '3-2-1', '3-3', '4-2', '4-1-1'],
-                            'FUT8': ['3-3-1', '3-2-2', '2-4-1'],
-                            'AMATEUR': ['4-4-2', '4-3-3', '3-5-2', '5-3-2', '4-2-3-1'],
-                            'PROFESSIONAL': ['4-4-2', '4-3-3', '3-5-2', '5-3-2', '4-2-3-1']
-                          };
-                          // Default to FUT7 if valid field missing, or fallback to 4-4-2 if completely unknown
-                          const type = myTeam.sportType || 'FUT7';
-                          const availableFormations = formations[type] || ['4-4-2', '4-3-3'];
-
-                          return availableFormations.map(form => (
-                            <button
-                              key={form}
-                              onClick={() => applyTacticalPreset(myTeam.id, form as any)}
-                              className="text-[10px] px-2 py-1 rounded font-bold text-slate-600 hover:bg-white hover:shadow-sm transition btn-feedback whitespace-nowrap"
-                            >
-                              {form}
-                            </button>
-                          ));
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                  <TacticsBoard
-                    team={myTeam}
-                    isEditable={isEditable}
-                    onSave={(pos) => handleSaveTeamTactics(myTeam.id, pos)}
-                  />
-                </div>
-
-                {/* ROSTER LIST */}
-                <div className="glass-panel rounded-3xl p-6 interactive-card">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800 dark:text-white">
+              {/* SQUAD LIST */}
+              <div className="glass-panel rounded-3xl p-6 interactive-card">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800 dark:text-white">
                     <Users size={20} className="text-blue-500 icon-hover" /> Elenco Completo
                   </h3>
-                  {myTeam.roster.length > 0 ? (
-                    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                      {myTeam.roster.map(p => (
-                        <div key={p.id} onClick={() => setSelectedPlayerForProfile({ player: p, teamName: myTeam.name })} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-emerald-300 hover:bg-emerald-50/50 cursor-pointer transition group btn-feedback">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-mono font-bold text-slate-400 text-sm group-hover:bg-emerald-200 group-hover:text-emerald-800 transition overflow-hidden">
-                              {(function () {
-                                const avatar = (p.userId === currentUser.id ? currentUser.avatar : null) || (p as any).avatar || (p as any).profilePicture;
-                                return avatar ? <img src={avatar} alt={p.name} className="w-full h-full object-cover" /> : p.number;
-                              })()}
-                            </div>
-                            <div>
-                              <div className="font-bold text-slate-800 text-sm group-hover:text-emerald-700">{p.name}</div>
-                              <div className="text-[10px] text-slate-600 uppercase font-bold tracking-wider">{p.position}</div>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <div className="flex gap-2 text-xs font-bold text-slate-400">
-                              {p.stats.goals > 0 && <span className="bg-emerald-100 text-emerald-600 px-1.5 py-0.5 rounded">{p.stats.goals} G</span>}
-                              {p.stats.assists > 0 && <span className="bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded">{p.stats.assists} A</span>}
-                            </div>
-                            {isEditable && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleRemovePlayer(myTeam.id, p.id); }}
-                                className="p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-500 rounded-lg transition opacity-0 group-hover:opacity-100"
-                                title="Remover Jogador"
-                              >
-                                <Trash2 size={16} />
-                              </button>
-                            )}
-                            {isEditable && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setSelectedPlayerForEvaluation({ player: p, teamId: myTeam.id }); setIsEvaluationModalOpen(true); }}
-                                className="p-1.5 text-slate-300 hover:bg-emerald-50 hover:text-emerald-500 rounded-lg transition opacity-0 group-hover:opacity-100"
-                                title="Avaliar Jogador"
-                              >
-                                <Activity size={16} />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-sm text-slate-400">Nenhum jogador no elenco.</div>
+                  {isEditable && (
+                    <button
+                      onClick={() => setIsViewingFullRoster(true)}
+                      className="text-[10px] px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg font-bold hover:bg-emerald-100 transition btn-feedback shadow-sm"
+                    >
+                      Gerenciar Elenco
+                    </button>
                   )}
                 </div>
+                {myTeam.roster.length > 0 ? (
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                    {myTeam.roster.map(p => (
+                      <div key={p.id} onClick={() => setSelectedPlayerForProfile({ player: p, teamName: myTeam.name })} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-emerald-300 hover:bg-emerald-50/50 cursor-pointer transition group btn-feedback">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-mono font-bold text-slate-400 text-sm group-hover:bg-emerald-200 group-hover:text-emerald-800 transition overflow-hidden">
+                            {(function () {
+                              const avatar = (p.userId === currentUser.id ? currentUser.avatar : null) || (p as any).avatar || (p as any).profilePicture;
+                              return avatar ? <img src={avatar} alt={p.name} className="w-full h-full object-cover" /> : p.number;
+                            })()}
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-800 text-sm group-hover:text-emerald-700">{p.name}</div>
+                            <div className="text-[10px] text-slate-600 uppercase font-bold tracking-wider">{p.position}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-slate-400">Nenhum jogador no elenco.</div>
+                )}
               </div>
             </div>
           </div>
-        </div >
+
+          {/* TEAM NEWS SECTION */}
+          <div className="border-t border-slate-200 dark:border-slate-800 pt-8 mt-4">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-xl">
+                < Newspaper className="text-emerald-600 dark:text-emerald-400" size={24} />
+              </div>
+              <div>
+                <h3 className="text-2xl font-black text-slate-900 dark:text-white">Notícias & Resenhas</h3>
+                <p className="text-sm text-slate-500 font-medium font-inter">Fique por dentro do que acontece no {myTeam.shortName}</p>
+              </div>
+            </div>
+
+            {teamNews.length > 0 ? (
+              <div className="space-y-10">
+                {/* Top 3 Featured */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {teamNews.slice(0, 3).map(item => (
+                    <div key={item.id} onClick={() => setSelectedNewsItem(item)} className="glass-panel rounded-2xl overflow-hidden interactive-card cursor-pointer group flex flex-col border border-slate-100 hover:border-emerald-200">
+                      <div className="h-40 bg-slate-100 dark:bg-slate-800 relative overflow-hidden">
+                        {item.media && item.media.length > 0 ? (
+                          <img src={item.media[0].url} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" alt={item.title} />
+                        ) : (
+                          <div className="w-full h-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center">
+                            <Newspaper size={40} className="text-emerald-500/30" />
+                          </div>
+                        )}
+                        <div className="absolute top-3 left-3">
+                          <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider shadow-lg">{item.category}</span>
+                        </div>
+                      </div>
+                      <div className="p-4 flex-1 flex flex-col bg-white dark:bg-slate-900">
+                        <span className="text-[10px] text-slate-400 font-bold mb-1">{new Date(item.date).toLocaleDateString()}</span>
+                        <h4 className="font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 transition truncate-2-lines leading-tight uppercase text-sm">{item.title}</h4>
+                        <p className="text-xs text-slate-500 mt-2 line-clamp-2 leading-relaxed">{item.excerpt}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Rest of News */}
+                {teamNews.length > 3 && (
+                  <div className="glass-panel rounded-3xl p-6 bg-white/40 dark:bg-slate-900/40">
+                    <h4 className="font-bold text-slate-800 dark:text-white mb-6 underline decoration-emerald-500 decoration-2 underline-offset-4 flex items-center gap-2">
+                      <Activity size={18} className="text-emerald-500" />
+                      Histórico de Notícias
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {teamNews.slice(3).map(item => (
+                        <div key={item.id} onClick={() => setSelectedNewsItem(item)} className="flex items-center gap-4 p-3 hover:bg-white dark:hover:bg-slate-800/80 rounded-2xl transition cursor-pointer group border border-transparent hover:border-slate-100 hover:shadow-sm">
+                          <div className="w-16 h-16 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0">
+                            {item.media && item.media.length > 0 ? (
+                              <img src={item.media[0].url} className="w-full h-full object-cover" alt="" />
+                            ) : (
+                              <div className="w-full h-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center"><Newspaper size={20} className="text-slate-400" /></div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[10px] text-emerald-600 font-bold uppercase">{item.category}</span>
+                              <span className="text-[10px] text-slate-400 font-medium">• {new Date(item.date).toLocaleDateString()}</span>
+                            </div>
+                            <h5 className="font-bold text-sm text-slate-800 dark:text-slate-200 truncate group-hover:text-emerald-600 transition uppercase">{item.title}</h5>
+                          </div>
+                          <ChevronRight size={16} className="text-slate-300 group-hover:text-emerald-500 transition" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-center py-16 glass-panel rounded-3xl border-dashed border-2 border-slate-200 bg-slate-50/50">
+                <Newspaper size={48} className="mx-auto text-slate-200 mb-4" />
+                <p className="text-slate-400 text-sm italic font-medium">Nenhuma notícia registrada para o {myTeam.shortName} ainda.</p>
+              </div>
+            )}
+          </div>
+        </div>
       );
     }
 
     // === UNIFIED TEAM LIST VIEW ===
-    console.log("DEBUG: check myTeams filter", {
-      currentUserId: currentUser?.id,
-      currentUserTeamId: currentUser?.teamId,
-      allTeamsCount: activeTeams.length,
-      sampleTeam: activeTeams[0]
-    });
-
     const myTeams = activeTeams.filter(t =>
       t.createdBy === currentUser!.id ||
       t.id === currentUser!.teamId
@@ -3501,16 +3243,16 @@ const App: React.FC = () => {
     <div className="min-h-screen font-sans relative bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300">
       {/* Navbar */}
       {currentUser && (
-        <nav className="glass-panel-dark text-white sticky top-4 z-40 mx-4 rounded-2xl mb-6 shadow-2xl backdrop-blur-xl">
+        <nav className="glass-panel dark:glass-panel-dark text-slate-900 dark:text-white sticky top-4 z-40 mx-4 rounded-2xl mb-6 shadow-2xl backdrop-blur-xl">
           <div className="px-6">
             <div className="flex justify-between items-center h-20">
 
               <div className="flex items-center gap-3 cursor-pointer group" onClick={() => changeView('HOME')}>
                 <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-2.5 rounded-xl shadow-lg shadow-emerald-900/50 group-hover:scale-105 transition icon-hover">
-                  <Trophy size={22} className="text-white" />
+                  <Trophy size={22} className="text-white dark:text-white" />
                 </div>
                 <div className="flex flex-col">
-                  <span className="font-black text-xl tracking-tight leading-none">Local<span className="text-emerald-400">Legends</span></span>
+                  <span className="font-black text-xl tracking-tight leading-none">Clube<span className="text-emerald-600 dark:text-emerald-400">DoContra</span></span>
                   <span className="text-[10px] text-slate-400 font-medium tracking-widest uppercase">Sports Manager</span>
                 </div>
               </div>
@@ -3530,10 +3272,10 @@ const App: React.FC = () => {
                     <button
                       key={item.id}
                       onClick={() => changeView(item.id as AppView)}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 btn-feedback ${isActive ? 'bg-white text-emerald-900 shadow-lg scale-105' : 'text-slate-300 hover:text-white hover:bg-white/10'
+                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 btn-feedback ${isActive ? 'bg-emerald-600 text-white dark:bg-white dark:text-emerald-900 shadow-lg scale-105' : 'text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-900/5 dark:hover:bg-white/10'
                         }`}
                     >
-                      <item.icon size={18} className={isActive ? 'text-emerald-600' : ''} />
+                      <item.icon size={18} className={isActive ? 'text-white dark:text-emerald-600' : ''} />
                       {item.label}
                     </button>
                   );
@@ -3544,7 +3286,7 @@ const App: React.FC = () => {
                 <div className="flex items-center gap-3">
                   {/* Notification Bell */}
                   <div className="relative" ref={notificationRef}>
-                    <button onClick={() => setIsNotificationsOpen(!isNotificationsOpen)} className="text-slate-300 hover:text-white p-2 rounded-full hover:bg-white/10 transition relative btn-feedback">
+                    <button onClick={() => setIsNotificationsOpen(!isNotificationsOpen)} className="text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white p-2 rounded-full hover:bg-slate-900/5 dark:hover:bg-white/10 transition relative btn-feedback">
                       <Bell size={22} />
                       {unreadNotifications.length > 0 && (
                         <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-900 animate-pulse"></span>
@@ -3575,13 +3317,13 @@ const App: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-3 cursor-pointer p-1.5 pl-2 pr-4 rounded-full bg-white/5 border border-white/10 hover:bg-white/10 transition btn-feedback" onClick={() => setViewingProfileId(currentUser.id)}>
+                  <div className="flex items-center gap-3 cursor-pointer p-1.5 pl-2 pr-4 rounded-full bg-slate-900/5 dark:bg-white/5 border border-slate-900/10 dark:border-white/10 hover:bg-slate-900/10 dark:hover:bg-white/10 transition btn-feedback" onClick={() => setViewingProfileId(currentUser.id)}>
                     <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white font-bold text-sm border-2 border-white/20 shadow-md overflow-hidden">
                       {currentUser.avatar ? <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" /> : currentUser.name.charAt(0)}
                     </div>
                     <div className="hidden md:flex flex-col items-start">
-                      <span className="text-xs font-bold text-white leading-tight">{currentUser.name}</span>
-                      <span className="text-[9px] text-emerald-400 uppercase font-black tracking-wider">{currentUser.role}</span>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white leading-tight">{currentUser.name}</span>
+                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-black tracking-wider">{currentUser.role}</span>
                     </div>
                   </div>
 
@@ -3620,7 +3362,7 @@ const App: React.FC = () => {
               <button
                 key={item.id}
                 onClick={() => changeView(item.id as AppView)}
-                className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-300 w-16 btn-feedback ${isActive ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-slate-600'}`}
+                className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-300 w-16 btn-feedback ${isActive ? 'text-emerald-700 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-950/50' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
               >
                 <item.icon size={20} className={isActive ? 'fill-current' : ''} />
                 <span className="text-[10px] font-bold">{item.label}</span>
@@ -3631,7 +3373,7 @@ const App: React.FC = () => {
 
           <button
             onClick={() => setViewingProfileId(currentUser.id)}
-            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-300 w-16 btn-feedback ${viewingProfileId ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:text-slate-600'}`}
+            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-300 w-16 btn-feedback ${viewingProfileId ? 'text-emerald-700 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-950/50' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
           >
             <User size={20} />
             <span className="text-[10px] font-bold">Perfil</span>
@@ -4012,6 +3754,8 @@ const App: React.FC = () => {
               toggleTheme={toggleTheme}
               evaluations={evaluations}
               matches={matches}
+              onDeleteEvaluation={handleDeleteEvaluation}
+              onResetEvaluations={handleResetEvaluations}
             />
           </div>
         )

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserAccount, UserRole, Team, CurrentUser, PlayerStats, SocialConnection, Match, PlayerEvaluation, MatchStatus } from '../types';
 import {
-   Camera, Edit2, MapPin, Calendar, Mail, Shield, Crown, Save, X, Activity, Heart, ArrowLeft, Lock, AlertTriangle, Moon, Sun, ChevronDown
+   Camera, Edit2, MapPin, Calendar, Mail, Shield, Crown, Save, X, Activity, Heart, ArrowLeft, Lock, AlertTriangle, Moon, Sun, ChevronDown, Trash2
 } from 'lucide-react';
 import { ROLE_DESCRIPTIONS } from '../constants';
 
@@ -22,10 +22,12 @@ interface UserProfileViewProps {
    onTogglePlayerRole?: (userId: string, teamId: string, shouldBePlayer: boolean) => void;
    theme: string;
    toggleTheme: () => void;
+   onDeleteEvaluation?: (id: string) => void;
+   onResetEvaluations?: (playerId: string) => void;
 }
 
 const UserProfileView: React.FC<UserProfileViewProps> = ({
-   viewingUser, currentUser, teams, socialGraph, matches, evaluations, onClose, onUpdateProfile, onFollow, onTeamClick, onDeleteUser, onUploadImage, onTogglePlayerRole, theme, toggleTheme
+   viewingUser, currentUser, teams, socialGraph, matches, evaluations, onClose, onUpdateProfile, onFollow, onTeamClick, onDeleteUser, onUploadImage, onTogglePlayerRole, theme, toggleTheme, onDeleteEvaluation, onResetEvaluations
 }) => {
    const isSelf = currentUser.id === viewingUser.id;
    const isFollowing = socialGraph.some(s => s.followerId === currentUser.id && s.targetId === viewingUser.id);
@@ -423,70 +425,95 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                      )}
 
                      {/* EVALUATIONS */}
-                     {/* EVALUATIONS */}
-                     {userEvaluations.length > 0 && !isEditing && (
-                        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                           <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide">
-                              <Activity size={16} className="text-emerald-500" /> Histórico de Avaliações
-                           </h3>
-                           <div className="space-y-4">
-                              {(showAllEvaluations ? userEvaluations : userEvaluations.slice(0, 2)).map(ev => {
-                                 // Attempt to find team context for evaluator
-                                 const evaluatorTeam = teams.find(t => t.createdBy === ev.evaluatorId); // Heuristic: Team Owner
-                                 const evaluatorLabel = ev.evaluatorId === currentUser.id
-                                    ? 'Você'
-                                    : (evaluatorTeam ? `Treinador (${evaluatorTeam.name})` : 'Treinador');
-
-                                 return (
-                                    <div key={ev.id} className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-lg">
-                                       <div className="flex justify-between items-start mb-2">
-                                          <div>
-                                             <div className="text-xs text-slate-400 font-bold uppercase">{new Date(ev.createdAt).toLocaleDateString()}</div>
-                                             <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">Avaliador: <span className="text-slate-700 dark:text-slate-300">{evaluatorLabel}</span></div>
-                                          </div>
-                                          <div className={`text-white font-bold px-2 py-1 rounded text-sm ${ev.rating >= 8 ? 'bg-emerald-500' : ev.rating >= 6 ? 'bg-yellow-500' : 'bg-red-500'}`}>
-                                             {ev.rating.toFixed(1)}
-                                          </div>
-                                       </div>
-
-                                       {/* Comments Section - Highlighted */}
-                                       {ev.comments && (
-                                          <div className="mt-2 mb-3 bg-white dark:bg-slate-800 p-2 rounded border border-slate-100 dark:border-slate-600">
-                                             <p className="text-xs text-slate-600 dark:text-slate-300 italic">"{ev.comments}"</p>
-                                          </div>
-                                       )}
-
-                                       <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-                                          <div className="bg-white dark:bg-slate-600 p-1 rounded">
-                                             <div className="text-[8px] text-slate-400 uppercase font-bold">Tec</div>
-                                             <div className="font-bold text-xs dark:text-white">{ev.technicalScore}</div>
-                                          </div>
-                                          <div className="bg-white dark:bg-slate-600 p-1 rounded">
-                                             <div className="text-[8px] text-slate-400 uppercase font-bold">Tat</div>
-                                             <div className="font-bold text-xs dark:text-white">{ev.tacticalScore}</div>
-                                          </div>
-                                          <div className="bg-white dark:bg-slate-600 p-1 rounded">
-                                             <div className="text-[8px] text-slate-400 uppercase font-bold">Fis</div>
-                                             <div className="font-bold text-xs dark:text-white">{ev.physicalScore}</div>
-                                          </div>
-                                          <div className="bg-white dark:bg-slate-600 p-1 rounded">
-                                             <div className="text-[8px] text-slate-400 uppercase font-bold">Men</div>
-                                             <div className="font-bold text-xs dark:text-white">{ev.mentalScore}</div>
-                                          </div>
-                                       </div>
-                                    </div>
-                                 );
-                              })}
+                     {!isEditing && (
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all">
+                           <div className="flex justify-between items-center mb-4">
+                              <h3 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 text-sm uppercase tracking-wide">
+                                 <Activity size={16} className="text-emerald-500" /> Histórico de Avaliações
+                              </h3>
+                              {userEvaluations.length > 0 && isDirector && onResetEvaluations && targetPlayerId && (
+                                 <button
+                                    onClick={() => { if (confirm("Deseja zerar todo o histórico de avaliações deste jogador?")) onResetEvaluations(targetPlayerId); }}
+                                    className="text-[10px] font-bold text-red-500 hover:text-red-700 flex items-center gap-1 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded transition"
+                                 >
+                                    <Trash2 size={10} /> Zerar Tudo
+                                 </button>
+                              )}
                            </div>
 
-                           {/* Show More Button */}
-                           {userEvaluations.length > 2 && (
-                              <button
-                                 onClick={() => setShowAllEvaluations(!showAllEvaluations)}
-                                 className="w-full mt-4 py-2 text-xs font-bold text-slate-500 hover:text-emerald-600 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-lg transition border border-dashed border-slate-200 dark:border-slate-700"
-                              >
-                                 {showAllEvaluations ? 'Ver menos' : `Ver mais (${userEvaluations.length - 2} restantes)`}
-                              </button>
+                           {userEvaluations.length > 0 ? (
+                              <>
+                                 <div className="space-y-4">
+                                    {(showAllEvaluations ? userEvaluations : userEvaluations.slice(0, 2)).map(ev => {
+                                       // Attempt to find team context for evaluator
+                                       const evaluatorTeam = teams.find(t => t.createdBy === ev.evaluatorId); // Heuristic: Team Owner
+                                       const evaluatorLabel = ev.evaluatorId === currentUser.id
+                                          ? 'Você'
+                                          : (evaluatorTeam ? `Treinador (${evaluatorTeam.name})` : 'Treinador');
+
+                                       return (
+                                          <div key={ev.id} className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-lg border border-slate-100 dark:border-slate-600/50">
+                                             <div className="flex justify-between items-start mb-2">
+                                                <div>
+                                                   <div className="text-xs text-slate-400 font-bold uppercase">{new Date(ev.createdAt).toLocaleDateString()}</div>
+                                                   <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">Avaliador: <span className="text-slate-700 dark:text-slate-300">{evaluatorLabel}</span></div>
+                                                </div>
+                                                <div className={`text-white font-bold px-2 py-1 rounded text-sm shadow-sm ${ev.rating >= 8 ? 'bg-emerald-500' : ev.rating >= 6 ? 'bg-yellow-500' : 'bg-red-500'}`}>
+                                                   {ev.rating.toFixed(1)}
+                                                </div>
+                                                {isDirector && onDeleteEvaluation && (
+                                                   <button
+                                                      onClick={() => { if (confirm("Excluir esta avaliação?")) onDeleteEvaluation(ev.id); }}
+                                                      className="p-1 text-slate-300 hover:text-red-500 transition ml-2"
+                                                   >
+                                                      <Trash2 size={12} />
+                                                   </button>
+                                                )}
+                                             </div>
+
+                                             {ev.comments && (
+                                                <div className="mt-2 mb-3 bg-white dark:bg-slate-800/80 p-2 rounded border border-slate-100 dark:border-slate-600/50">
+                                                   <p className="text-xs text-slate-600 dark:text-slate-300 italic font-medium">"{ev.comments}"</p>
+                                                </div>
+                                             )}
+
+                                             <div className="mt-3 grid grid-cols-4 gap-2 text-center">
+                                                <div className="bg-white dark:bg-slate-600 p-1.5 rounded shadow-sm">
+                                                   <div className="text-[8px] text-slate-400 uppercase font-black">Tec</div>
+                                                   <div className="font-bold text-xs text-slate-800 dark:text-white">{ev.technicalScore}</div>
+                                                </div>
+                                                <div className="bg-white dark:bg-slate-600 p-1.5 rounded shadow-sm">
+                                                   <div className="text-[8px] text-slate-400 uppercase font-black">Tat</div>
+                                                   <div className="font-bold text-xs text-slate-800 dark:text-white">{ev.tacticalScore}</div>
+                                                </div>
+                                                <div className="bg-white dark:bg-slate-600 p-1.5 rounded shadow-sm">
+                                                   <div className="text-[8px] text-slate-400 uppercase font-black">Fis</div>
+                                                   <div className="font-bold text-xs text-slate-800 dark:text-white">{ev.physicalScore}</div>
+                                                </div>
+                                                <div className="bg-white dark:bg-slate-600 p-1.5 rounded shadow-sm">
+                                                   <div className="text-[8px] text-slate-400 uppercase font-black">Men</div>
+                                                   <div className="font-bold text-xs text-slate-800 dark:text-white">{ev.mentalScore}</div>
+                                                </div>
+                                             </div>
+                                          </div>
+                                       );
+                                    })}
+                                 </div>
+
+                                 {userEvaluations.length > 2 && (
+                                    <button
+                                       onClick={() => setShowAllEvaluations(!showAllEvaluations)}
+                                       className="w-full mt-4 py-2 text-xs font-bold text-slate-500 hover:text-emerald-600 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-lg transition border border-dashed border-slate-200 dark:border-slate-700"
+                                    >
+                                       {showAllEvaluations ? 'Ver menos' : `Ver mais (${userEvaluations.length - 2} restantes)`}
+                                    </button>
+                                 )}
+                              </>
+                           ) : (
+                              <div className="py-12 flex flex-col items-center justify-center text-center bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                                 <Activity size={32} className="text-slate-200 dark:text-slate-700 mb-3" />
+                                 <p className="text-slate-400 dark:text-slate-500 text-sm italic font-medium">O usuário ainda não foi avaliado pelo time.</p>
+                              </div>
                            )}
                         </div>
                      )}

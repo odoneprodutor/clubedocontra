@@ -110,7 +110,7 @@ create table if not exists public.social_connections (
 );
 
 -- ROW LEVEL SECURITY (RLS) POLICIES
--- For now, to enable the app to work easily with the ANON key as requested by user context ("LocalLegends"),
+-- For now, to enable the app to work easily with the ANON key as requested by user context ("ClubeDoContra"),
 -- we will ENABLE RLS but add a policy to allow ALL access for anon.
 -- IN PRODUCTION, this should be restricted.
 

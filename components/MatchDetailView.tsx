@@ -8,7 +8,7 @@ import {
   ExternalLink, Map as MapIcon, BarChart3, Users, Upload, Sparkles, Copy, FileText, Newspaper, Save
 } from 'lucide-react';
 import TacticsBoard from './TacticsBoard';
-import { AIService } from '../services/gemini';
+import { AIService } from '../services/aiService';
 
 interface MatchDetailViewProps {
   match: Match;
@@ -855,7 +855,7 @@ const MatchDetailView: React.FC<MatchDetailViewProps> = ({
                   <Sparkles size={20} />
                 </div>
                 <div>
-                  <h3 className="font-bold text-slate-800">LocalLegends AI</h3>
+                  <h3 className="font-bold text-slate-800">ClubeDoContra AI</h3>
                   <p className="text-xs text-slate-500 font-medium">Correspondente Virtual</p>
                 </div>
               </div>
