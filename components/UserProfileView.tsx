@@ -143,12 +143,12 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                   <div
                      className="w-full h-full transition-colors duration-500"
                      style={{
-                        background: activeTeam?.primaryColor
-                           ? `linear-gradient(135deg, ${activeTeam.primaryColor}, ${activeTeam.secondaryColor || '#1f2937'})`
+                        background: (activeTeam?.primaryColor || activeTeam?.logoColor)
+                           ? `linear-gradient(135deg, ${activeTeam.primaryColor || activeTeam.logoColor}, ${activeTeam.secondaryColor || '#1f2937'})`
                            : undefined
                      }}
                   >
-                     {!activeTeam?.primaryColor && <div className="w-full h-full bg-gradient-to-r from-emerald-600 to-slate-800"></div>}
+                     {(!activeTeam?.primaryColor && !activeTeam?.logoColor) && <div className="w-full h-full bg-gradient-to-r from-emerald-600 to-slate-800"></div>}
                   </div>
                )}
 

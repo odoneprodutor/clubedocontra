@@ -3,11 +3,11 @@ import {
   Users, Trophy, Calendar, Shield, Crown, Menu, X, Plus, CheckCircle, MapPin,
   Home, Newspaper, Layout, Map, ArrowLeft, Filter, Save, Trash2, User, Activity,
   MessageCircle, Settings, LogOut, Bell, Heart, UserPlus, Lock, ChevronDown, ChevronUp, AlertTriangle, Mail, Key,
-  Camera, Briefcase, Target, Grid, List as ListIcon, Play
+  Camera, Briefcase, Target, Grid, List as ListIcon, Play, Video, Image as ImageIcon
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import {
-  UserRole, Team, Match, Arena, MatchStatus, MatchType, AppView, Tournament, MatchEventType, Player, TacticalPosition, ChatMessage, CurrentUser, Notification, SocialConnection, UserAccount, PlayerStats, SportType, MatchMedia, PlayerEvaluation
+  UserRole, Team, Match, Arena, MatchStatus, MatchType, AppView, Tournament, MatchEventType, Player, TacticalPosition, ChatMessage, CurrentUser, Notification, SocialConnection, UserAccount, PlayerStats, SportType, MatchMedia, PlayerEvaluation, NewsItem
 } from './types';
 import {
   INITIAL_ARENAS, INITIAL_MATCHES, INITIAL_TEAMS, INITIAL_TOURNAMENTS, MOCK_NEWS, ROLE_DESCRIPTIONS, DEFAULT_DIRECTOR_ID, INITIAL_NOTIFICATIONS, INITIAL_SOCIAL, MOCK_USERS, SAFE_TEAM, SPORT_TYPE_DETAILS
@@ -517,6 +517,8 @@ const App: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [socialGraph, setSocialGraph] = useState<SocialConnection[]>([]);
   const [evaluations, setEvaluations] = useState<PlayerEvaluation[]>([]);
+  const [news, setNews] = useState<NewsItem[]>(MOCK_NEWS); // Initialize with Mock, then allow updates
+  const [selectedNewsItem, setSelectedNewsItem] = useState<NewsItem | null>(null);
 
   // Loading State
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -674,6 +676,7 @@ const App: React.FC = () => {
   const [itemToDelete, setItemToDelete] = useState<{ id: string, type: 'MATCH' | 'TEAM' | 'TOURNAMENT' | 'USER' } | null>(null);
 
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null);
+  const [broadcastingMatchId, setBroadcastingMatchId] = useState<string | null>(null); // Lifted state for persistent broadcast
   const [selectedPlayerForProfile, setSelectedPlayerForProfile] = useState<{ player: Player, teamName: string } | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
@@ -1005,7 +1008,7 @@ const App: React.FC = () => {
     setItemToDelete({ id, type });
   };
 
-  const executeDeletion = () => {
+  const executeDeletion = async () => {
     if (!itemToDelete || !currentUser) return;
 
     const { id, type } = itemToDelete;
@@ -1016,40 +1019,20 @@ const App: React.FC = () => {
         supabase.from('matches').update({ is_deleted: true }).eq('id', id).then(({ error }) => {
           if (error) console.error("Error deleting match:", error);
         });
-        setMatches(prev => prev.map(m => m.id === id ? { ...m, isDeleted: true } : m));
+
+        const updatedMatchesList = matches.map(m => m.id === id ? { ...m, isDeleted: true } : m);
+        setMatches(updatedMatchesList);
         setSelectedMatchId(null);
         setIsMatchModalOpen(false);
-      } else {
-        alert("Você não tem permissão para excluir este item.");
-      }
-    } else if (type === 'TEAM') {
-      const item = teams.find(t => t.id === id);
-      if (item && item.createdBy === currentUser.id) {
-        supabase.from('teams').update({ is_deleted: true }).eq('id', id).then(({ error }) => {
-          if (error) console.error("Error deleting team:", error);
-        });
 
-        // 1. Remove team from list
-        setTeams(prev => prev.map(t => t.id === id ? { ...t, isDeleted: true } : t));
-
-        // 2. If the creator was also a member of this team (likely), remove their association
-        if (currentUser.teamId === id) {
-          // Update DB
-          supabase.from('users').update({ team_id: null }).eq('id', currentUser.id).then(({ error }) => {
-            if (error) console.error("Error clearing user team_id:", error);
-          });
-
-          // Update Local State for Current User
-          const updatedUser = { ...currentUser, teamId: null, role: UserRole.DIRECTOR }; // Keep role Director or revert? Keeping Director is safer for now.
-          setCurrentUser(updatedUser);
-
-          // Update User Accounts List
-          setUserAccounts(prev => prev.map(u => u.id === currentUser.id ? { ...u, teamId: null } : u));
+        if (item.status === MatchStatus.FINISHED) {
+          const activeMatches = updatedMatchesList.filter(m => !m.isDeleted);
+          await recalculateTeamStats(item.homeTeamId, activeMatches, teams);
+          await recalculateTeamStats(item.awayTeamId, activeMatches, teams);
         }
-
-        setViewingTeamId(null);
+        alert("Jogo excluído.");
       } else {
-        alert("Você não tem permissão para excluir este time.");
+        alert("Você não tem permissão para excluir este jogo.");
       }
     } else if (type === 'TOURNAMENT') {
       const item = tournaments.find(t => t.id === id);
@@ -1062,16 +1045,55 @@ const App: React.FC = () => {
       } else {
         alert("Você não tem permissão para excluir este campeonato.");
       }
+    } else if (type === 'TEAM') {
+      const team = teams.find(t => t.id === id);
+      if (team && (team.createdBy === currentUser.id || currentUser.role === UserRole.DIRECTOR)) {
+        const teamMatches = matches.filter(m => m.homeTeamId === id || m.awayTeamId === id);
+        const teamMatchIds = teamMatches.map(m => m.id);
+
+        if (teamMatchIds.length > 0) {
+          await supabase.from('matches').update({ is_deleted: true }).in('id', teamMatchIds);
+        }
+        await supabase.from('teams').update({ is_deleted: true }).eq('id', id);
+
+        // Cleanup Users (Set team_id to null)
+        await supabase.from('users').update({ team_id: null }).eq('team_id', id);
+        setUserAccounts(prev => prev.map(u => u.teamId === id ? { ...u, teamId: null } : u));
+        if (currentUser.teamId === id) {
+          setCurrentUser(prev => prev ? { ...prev, teamId: null } : null);
+        }
+
+        // Update Local State
+        setTeams(prev => prev.filter(t => t.id !== id));
+        const updatedMatches = matches.map(m => teamMatchIds.includes(m.id) ? { ...m, isDeleted: true } : m);
+        setMatches(updatedMatches);
+
+        setViewingTeamId(null);
+        setIsTeamModalOpen(false);
+        setViewingProfileId(null);
+
+        const opponents = new Set<string>();
+        teamMatches.forEach(m => {
+          if (m.homeTeamId !== id) opponents.add(m.homeTeamId);
+          if (m.awayTeamId !== id) opponents.add(m.awayTeamId);
+        });
+
+        const remainingTeams = teams.filter(t => t.id !== id);
+        const activeMatches = updatedMatches.filter(m => !m.isDeleted);
+
+        for (const oppId of Array.from(opponents)) {
+          await recalculateTeamStats(oppId, activeMatches, remainingTeams);
+        }
+        alert("Time e todo o histórico de partidas relacionado foram excluídos com sucesso.");
+      } else {
+        alert("Permissão negada.");
+      }
     } else if (type === 'USER') {
-      // Mock User Deletion (Admin only)
       if (currentUser.role === UserRole.DIRECTOR) {
-        // In real app, we would mark account deleted
-        // supabase.from('users').delete().eq('id', id); // Logic to implement later if needed
         setUserAccounts(prev => prev.filter(u => u.id !== id));
         alert("Usuário removido.");
       }
     }
-
     setItemToDelete(null);
   };
 
@@ -1390,96 +1412,241 @@ const App: React.FC = () => {
     alert("Time criado com sucesso! Você foi adicionado como jogador e diretor.");
   };
 
+  const handlePostGeneratedNews = async (content: string, context: { matchId?: string, tournamentId?: string }) => {
+    // Parse AI Content
+    const lines = content.split('\n');
+    const aiTitle = lines[0].replace(/[*#]/g, '').trim();
+    const aiBody = lines.slice(1).join('\n').replace(/\*\*/g, '').replace(/^#+\s/gm, '').trim();
+
+    let newItem: NewsItem;
+
+    // CASE 1: MATCH NEWS
+    if (context.matchId) {
+      const match = matches.find(m => m.id === context.matchId);
+      if (!match) return;
+
+      const hTeam = getTeam(match.homeTeamId);
+      const aTeam = getTeam(match.awayTeamId);
+
+      // Determine Stream Link
+      let streamLink: string | undefined = undefined;
+      if (match.youtubeVideoId) {
+        streamLink = `https://youtube.com/watch?v=${match.youtubeVideoId}`;
+      } else if (match.streams && match.streams.length > 0) {
+        const stream = match.streams[0];
+        if (stream.provider === 'YOUTUBE') {
+          streamLink = `https://youtube.com/watch?v=${stream.identifier}`;
+        } else if (stream.provider === 'TWITCH') {
+          streamLink = `https://twitch.tv/${stream.identifier}`;
+        } else {
+          streamLink = stream.identifier;
+          if (!streamLink.startsWith('http')) {
+            streamLink = `https://${streamLink}`;
+          }
+        }
+      }
+
+      newItem = {
+        id: `news-${Date.now()}`,
+        title: aiTitle.length > 5 ? aiTitle : `${hTeam.shortName} x ${aTeam.shortName}: Resenha do Jogo`,
+        excerpt: aiBody.substring(0, 120) + (aiBody.length > 120 ? "..." : ""),
+        content: aiBody || content,
+        date: new Date().toISOString(),
+        category: 'Resenha IA (Jogo)',
+        author: 'IA LocalLegends',
+        teamId: match.homeTeamId,
+        tournamentId: match.tournamentId,
+        media: match.media,
+        externalLink: streamLink
+      };
+
+      // CASE 2: TOURNAMENT NEWS
+    } else if (context.tournamentId) {
+      const tournament = activeTournaments.find(t => t.id === context.tournamentId);
+      if (!tournament) return;
+
+      newItem = {
+        id: `news-${Date.now()}`,
+        title: aiTitle.length > 5 ? aiTitle : `Resenha da Rodada: ${tournament.name}`,
+        excerpt: aiBody.substring(0, 120) + (aiBody.length > 120 ? "..." : ""),
+        content: aiBody || content,
+        date: new Date().toISOString(),
+        category: 'Resenha IA (Camp)',
+        author: 'IA LocalLegends',
+        tournamentId: tournament.id
+      };
+    } else {
+      return;
+    }
+
+    setNews(prev => [newItem, ...prev]);
+    alert("Resenha postada na aba de Notícias!");
+  };
+
+  // --- STATS ENGINE ---
+  const recalculateTeamStats = async (teamId: string, allMatches: Match[], currentTeams: Team[]) => {
+    const team = currentTeams.find(t => t.id === teamId);
+    if (!team) return;
+
+    // Filter relevant matches: Active, Finished, involving this team
+    const teamMatches = allMatches.filter(m =>
+      (m.homeTeamId === teamId || m.awayTeamId === teamId) &&
+      m.status === MatchStatus.FINISHED &&
+      !m.isDeleted
+    );
+
+    // Reset Team Stats
+    const newTeamStats = {
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      goalsFor: 0,
+      goalsAgainst: 0,
+      points: 0
+    };
+
+    // Helper map for player stats
+    const playerStatsMap: Record<string, PlayerStats> = {};
+    // Initialize for current roster
+    team.roster.forEach(p => {
+      playerStatsMap[p.id] = { goals: 0, assists: 0, yellowCards: 0, redCards: 0, matchesPlayed: 0 };
+    });
+
+    // Process Matches
+    teamMatches.forEach(match => {
+      const isHome = match.homeTeamId === teamId;
+      const myScore = isHome ? match.homeScore : match.awayScore;
+      const oppScore = isHome ? match.awayScore : match.homeScore;
+      const opponentTeamId = isHome ? match.awayTeamId : match.homeTeamId;
+
+      // 1. Team Stats
+      newTeamStats.goalsFor += myScore;
+      newTeamStats.goalsAgainst += oppScore;
+
+      if (myScore > oppScore) {
+        newTeamStats.wins++;
+        newTeamStats.points += 3;
+      } else if (myScore < oppScore) {
+        newTeamStats.losses++;
+      } else {
+        newTeamStats.draws++;
+        newTeamStats.points += 1;
+      }
+
+      // Check which players "played for opponent" in this match
+      // A player is considered playing for opponent if they have an event logged for the opponent team
+      const playersPlayingForOpponent = new Set<string>();
+      match.events.forEach(ev => {
+        if (ev.teamId === opponentTeamId && ev.playerId) {
+          playersPlayingForOpponent.add(ev.playerId);
+        }
+      });
+
+      // 2. Player Stats - Matches Played
+      // Increment for everyone in current roster, UNLESS they played for the opponent in this specific match
+      team.roster.forEach(p => {
+        if (playerStatsMap[p.id]) {
+          // Strict Check: If player is active for opponent, do not count match played for this team
+          if (!playersPlayingForOpponent.has(p.id)) {
+            playerStatsMap[p.id].matchesPlayed++;
+          }
+        }
+      });
+
+      // 3. Player Stats - Events
+      match.events.forEach(ev => {
+        // Strict Check: Event must belong to THIS team
+        // We use ev.teamId. If missing (legacy), fallback to existing behavior but warn.
+        // Assuming modern events have teamId (handleAddEvent ensures it).
+
+        const belongsToThisTeam = ev.teamId === teamId;
+
+        if (belongsToThisTeam && ev.playerId && playerStatsMap[ev.playerId]) {
+          const pStats = playerStatsMap[ev.playerId];
+
+          if (ev.type === MatchEventType.GOAL) pStats.goals++;
+          if (ev.type === MatchEventType.YELLOW_CARD) pStats.yellowCards++;
+          if (ev.type === MatchEventType.RED_CARD) pStats.redCards++;
+        }
+      });
+    });
+
+    // DB Updates
+    const dbUpdates = {
+      wins: newTeamStats.wins,
+      draws: newTeamStats.draws,
+      losses: newTeamStats.losses,
+      goals_for: newTeamStats.goalsFor,
+      goals_against: newTeamStats.goalsAgainst,
+      points: newTeamStats.points
+    };
+
+    // Update Team Entity
+    await supabase.from('teams').update(dbUpdates).eq('id', teamId);
+
+    // Update Roster
+    const newRoster = team.roster.map(p => ({
+      ...p,
+      stats: playerStatsMap[p.id] || p.stats
+    }));
+
+    await supabase.from('teams').update({ roster: newRoster }).eq('id', teamId);
+
+    // Update Local State
+    setTeams(prev => prev.map(t => {
+      if (t.id === teamId) {
+        return {
+          ...t,
+          ...newTeamStats,
+          roster: newRoster
+        };
+      }
+      return t;
+    }));
+  };
+
   const handleFinishMatch = async (matchId: string) => {
     const match = matches.find(m => m.id === matchId);
     if (!match) return;
     if (match.status === MatchStatus.FINISHED) return;
 
-    const homeTeam = teams.find(t => t.id === match.homeTeamId);
-    const awayTeam = teams.find(t => t.id === match.awayTeamId);
-    if (!homeTeam || !awayTeam) return;
-
-    // 1. Calculate Result
-    const isDraw = match.homeScore === match.awayScore;
-    const homeWin = match.homeScore > match.awayScore;
-    const awayWin = match.awayScore > match.homeScore;
-
-    // 2. Prepare Updates Stats
-    const homeUpdates = {
-      points: homeTeam.points + (homeWin ? 3 : isDraw ? 1 : 0),
-      wins: homeTeam.wins + (homeWin ? 1 : 0),
-      draws: homeTeam.draws + (isDraw ? 1 : 0),
-      losses: homeTeam.losses + (awayWin ? 1 : 0),
-      goals_for: homeTeam.goalsFor + match.homeScore,
-      goals_against: homeTeam.goalsAgainst + match.awayScore
-    };
-
-    const awayUpdates = {
-      points: awayTeam.points + (awayWin ? 3 : isDraw ? 1 : 0),
-      wins: awayTeam.wins + (awayWin ? 1 : 0),
-      draws: awayTeam.draws + (isDraw ? 1 : 0),
-      losses: awayTeam.losses + (homeWin ? 1 : 0),
-      goals_for: awayTeam.goalsFor + match.awayScore,
-      goals_against: awayTeam.goalsAgainst + match.homeScore
-    };
-
-    // 3. Process Player Stats from Events
-    const playerStatsUpdates: Record<string, PlayerStats> = {};
-
-    // Helper
-    const getStats = (pId: string, team: Team) => {
-      if (playerStatsUpdates[pId]) return playerStatsUpdates[pId];
-      const p = team.roster.find(r => r.id === pId);
-      return p ? { ...p.stats } : { goals: 0, assists: 0, yellowCards: 0, redCards: 0, matchesPlayed: 0 };
-    };
-
-    // Add Match Played to everyone on roster
-    [homeTeam, awayTeam].forEach(team => {
-      team.roster.forEach(p => {
-        const s = getStats(p.id, team);
-        s.matchesPlayed += 1;
-        playerStatsUpdates[p.id] = s;
-      });
-    });
-
-    // Add specific event stats
-    match.events.forEach(e => {
-      if (e.playerId) {
-        const team = e.teamId === homeTeam.id ? homeTeam : awayTeam;
-        const s = getStats(e.playerId, team);
-        if (e.type === MatchEventType.GOAL) s.goals += 1;
-        if (e.type === MatchEventType.YELLOW_CARD) s.yellowCards += 1;
-        if (e.type === MatchEventType.RED_CARD) s.redCards += 1;
-        playerStatsUpdates[e.playerId] = s;
-      }
-    });
-
-    // 4. Persistence
-    await supabase.from('teams').update(homeUpdates).eq('id', homeTeam.id);
-    await supabase.from('teams').update(awayUpdates).eq('id', awayTeam.id);
+    // 1. Mark as Finished in DB and State first
     await supabase.from('matches').update({ status: MatchStatus.FINISHED }).eq('id', match.id);
 
-    // Update Rosters (assuming JSON column)
-    const newHomeRoster = homeTeam.roster.map(p => playerStatsUpdates[p.id] ? { ...p, stats: playerStatsUpdates[p.id] } : p);
-    const newAwayRoster = awayTeam.roster.map(p => playerStatsUpdates[p.id] ? { ...p, stats: playerStatsUpdates[p.id] } : p);
-
-    const { error: errorRosterHome } = await supabase.from('teams').update({ roster: newHomeRoster }).eq('id', homeTeam.id);
-    const { error: errorRosterAway } = await supabase.from('teams').update({ roster: newAwayRoster }).eq('id', awayTeam.id);
-
-    if (errorRosterHome || errorRosterAway) {
-      console.error("Error updating rosters", errorRosterHome, errorRosterAway);
-      alert("Erro ao atualizar estatísticas dos jogadores.");
-    }
-
-    // Update Local State
-    setMatches(prev => prev.map(m => m.id === matchId ? { ...m, status: MatchStatus.FINISHED } : m));
-    setTeams(prev => prev.map(t => {
-      if (t.id === homeTeam.id) return { ...t, ...homeUpdates, roster: newHomeRoster, goalsFor: homeUpdates.goals_for, goalsAgainst: homeUpdates.goals_against };
-      if (t.id === awayTeam.id) return { ...t, ...awayUpdates, roster: newAwayRoster, goalsFor: awayUpdates.goals_for, goalsAgainst: awayUpdates.goals_against };
-      return t;
-    }));
+    // Optimistic Update State for Match
+    const updatedMatch = { ...match, status: MatchStatus.FINISHED };
+    const updatedMatchesList = matches.map(m => m.id === matchId ? updatedMatch : m);
+    setMatches(updatedMatchesList);
     setSelectedMatchId(null);
-    alert("Partida encerrada! Estatísticas atualizadas com sucesso.");
+
+    // 2. Recalculate Stats for BOTH Teams
+    // Pass the updated list so the calculation includes this match
+    await recalculateTeamStats(match.homeTeamId, updatedMatchesList, teams);
+    await recalculateTeamStats(match.awayTeamId, updatedMatchesList, teams);
+
+    alert("Partida encerrada! Estatísticas recalculadas com sucesso.");
+  };
+
+  const handleStartBroadcast = (matchId: string) => {
+    // console.log("Starting broadcast for match:", matchId);
+    // setBroadcastingMatchId(matchId);
+    alert("Transmissão nativa desativada temporariamente. Você pode adicionar links externos (YouTube/Twitch) na aba 'Transmissão' do jogo.");
+  };
+
+  const handleUpdateStreams = async (matchId: string, streams: any[]) => {
+    // Optimistic Update
+    setMatches(prev => prev.map(m => m.id === matchId ? { ...m, streams } : m));
+
+    // Supabase Update
+    // Assuming 'streams' column exists or we need to use 'detailed_stats' or similar if schema is strict.
+    // For now try updating 'streams' column. If fails, we might need to migrate.
+    // Given valid columns are usually snake_case in this DB: 'streams'
+    const { error } = await supabase.from('matches').update({ streams: streams }).eq('id', matchId);
+
+    if (error) {
+      console.error("Error updating streams:", error);
+      // alert("Erro ao salvar streams."); // Optional feedback
+    }
   };
 
   const handleUpdateTeam = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -1852,37 +2019,50 @@ const App: React.FC = () => {
   // PROFILE VIEW (Replaces other views if set) - REMOVED to allow Modal behavior
   // if (viewingProfileId) { ... }
 
-  if (selectedMatchId && selectedMatch) {
-    return (
-      <MatchDetailView
-        match={selectedMatch}
-        homeTeam={getTeam(selectedMatch.homeTeamId)}
-        awayTeam={getTeam(selectedMatch.awayTeamId)}
-        arena={getArena(selectedMatch.arenaId)}
-        currentUser={currentUser}
-        onClose={() => setSelectedMatchId(null)}
-        onAddEvent={handleAddEvent}
-        onViewPlayer={(player, teamName) => setSelectedPlayerForProfile({ player, teamName })}
-        onSendMessage={handleSendMessage}
-        onSaveMatchTactics={handleSaveMatchTactics}
-        onAddMedia={handleAddMatchMedia}
-        onFinishMatch={handleFinishMatch}
-      />
-    );
-  }
+
 
   const renderHomeView = () => {
     // 1. North Star Logic: Fan Feed
     let fanMatches = upcomingMatches;
-    let fanNews = MOCK_NEWS;
+    let fanNews = news;
 
     // Filter news/matches based on followed teams + user's team
     const followedTeamIds = socialGraph.filter(s => s.followerId === currentUser.id).map(s => s.targetId);
     if (currentUser.teamId) followedTeamIds.push(currentUser.teamId);
 
-    if (currentUser.role === UserRole.FAN && followedTeamIds.length > 0) {
-      fanMatches = upcomingMatches.filter(m => followedTeamIds.includes(m.homeTeamId) || followedTeamIds.includes(m.awayTeamId));
-      fanNews = MOCK_NEWS.filter(n => !n.teamId || followedTeamIds.includes(n.teamId));
+    if (currentUser.role === UserRole.FAN) {
+      // 1. Filter Matches (Keep strict to following)
+      if (followedTeamIds.length > 0) {
+        fanMatches = upcomingMatches.filter(m => followedTeamIds.includes(m.homeTeamId) || followedTeamIds.includes(m.awayTeamId));
+      }
+
+      // 2. Filter News (Broaden for Local Championships)
+      fanNews = news.filter(n => {
+        // A. Team News (Match Reviews) -> Must follow team
+        if (n.teamId) {
+          return followedTeamIds.includes(n.teamId);
+        }
+
+        // B. Tournament News (Round Reviews) -> Local relevance OR Participation
+        if (n.tournamentId) {
+          const tournament = activeTournaments.find(t => t.id === n.tournamentId);
+          // If tournament not found, hide
+          if (!tournament) return false;
+
+          // Is user following a participant?
+          const isFollowingParticipant = tournament.participatingTeamIds.some(tid => followedTeamIds.includes(tid));
+          if (isFollowingParticipant) return true;
+
+          // Is it a Local/State Championship in user's city?
+          // Defaulting user location to 'Taquara' if undefined for demo, or checking match
+          const userCity = currentUser.location || 'Taquara';
+          const isLocal = (tournament.scope === 'MUNICIPAL' || tournament.scope === 'ESTADUAL') && tournament.city === userCity;
+
+          return isLocal;
+        }
+
+        return false;
+      });
     }
 
     // FILTER FEATURED MATCH BY STATUS (NEW)
@@ -2071,7 +2251,7 @@ const App: React.FC = () => {
         <div className="space-y-6">
           {/* Context Aware Championship Dropdown */}
           <div className="glass-panel p-6 rounded-3xl interactive-card">
-            <h3 className="font-bold text-white mb-4 flex items-center gap-2 text-lg">
+            <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 text-lg">
               <Trophy size={20} className="text-amber-500 icon-hover" />
               Campeonatos
             </h3>
@@ -2083,7 +2263,7 @@ const App: React.FC = () => {
                     onChange={(e) => setHomeFeedTournamentId(e.target.value)}
                     value={homeFeedTournamentId || ''}
                   >
-                    <option value="">Selecione um campeonato...</option>
+                    <option value="" className="text-slate-800">Selecione um campeonato...</option>
                     {visibleTournaments.map(t => (
                       <option key={t.id} value={t.id}>{t.name}</option>
                     ))}
@@ -2109,30 +2289,30 @@ const App: React.FC = () => {
                     </button>
                   </div>
                 ) : (
-                  <div className="p-6 bg-slate-50/50 text-center text-slate-400 text-sm rounded-xl border border-dashed border-slate-200">
+                  <div className="p-6 bg-slate-50/50 text-center text-slate-500 font-medium text-sm rounded-xl border border-dashed border-slate-200">
                     Selecione um campeonato acima para ver a tabela.
                   </div>
                 )}
               </>
             ) : (
-              <div className="text-sm text-slate-400">Nenhum campeonato ativo.</div>
+              <div className="text-sm text-slate-500 font-medium">Nenhum campeonato ativo.</div>
             )}
           </div>
 
           <div className="glass-panel p-6 rounded-3xl interactive-card">
-            <h3 className="font-bold text-white mb-4 flex items-center gap-2 text-lg">
+            <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 text-lg">
               <Newspaper size={20} className="text-blue-500 icon-hover" />
               Notícias
             </h3>
             <div className="space-y-4">
               {fanNews.length > 0 ? fanNews.slice(0, 3).map(news => (
-                <div key={news.id} className="group cursor-pointer">
+                <div key={news.id} className="group cursor-pointer" onClick={() => setSelectedNewsItem(news)}>
                   <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide bg-emerald-50 px-2 py-0.5 rounded-full">{news.category}</span>
                   <h4 className="font-bold text-sm text-white mt-1 group-hover:text-emerald-400 transition">{news.title}</h4>
                   <div className="h-px bg-slate-100 w-full mt-3 group-last:hidden"></div>
                 </div>
               )) : (
-                <div className="text-sm text-slate-400">Nenhuma notícia recente.</div>
+                <div className="text-sm text-slate-500 font-medium">Nenhuma notícia recente.</div>
               )}
             </div>
           </div>
@@ -2273,7 +2453,7 @@ const App: React.FC = () => {
               ) : (myTeam.cover ? (
                 <img src={myTeam.cover} alt="Cover" className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full bg-gradient-to-r from-emerald-600 to-slate-800" style={isEditingTeam && previewTeamData ? { background: `linear-gradient(to right, ${previewTeamData.primaryColor || '#10b981'}, ${previewTeamData.secondaryColor || '#0f172a'})` } : {}}></div>
+                <div className="w-full h-full bg-gradient-to-r from-emerald-600 to-slate-800" style={isEditingTeam && previewTeamData ? { background: `linear-gradient(to right, ${previewTeamData.primaryColor || '#10b981'}, ${previewTeamData.secondaryColor || '#0f172a'})` } : { background: (myTeam.primaryColor || myTeam.logoColor) ? `linear-gradient(to right, ${myTeam.primaryColor || myTeam.logoColor}, ${myTeam.secondaryColor || '#0f172a'})` : undefined }}></div>
               ))}
               <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
 
@@ -2450,24 +2630,45 @@ const App: React.FC = () => {
                         </div>
                       </div>
 
-                      <p className="text-[10px] text-emerald-600 font-medium bg-emerald-50 p-2 rounded">
-                        * As alterações serão salvas ao clicar em confirmar.
-                      </p>
+                      <div className="flex flex-col gap-2 mt-1">
+                        <div className="flex gap-2">
+                          <button type="submit" className="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-xs font-bold shadow-md hover:bg-emerald-500 transition">Salvar</button>
+                          <button type="button" onClick={() => setIsEditingTeam(false)} className="px-3 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition">Cancelar</button>
+                        </div>
 
-                      <div className="flex gap-2 mt-1">
-                        <button type="submit" className="flex-1 bg-emerald-600 text-white py-2 rounded-lg text-xs font-bold shadow-md hover:bg-emerald-500 transition">Salvar Alterações</button>
-                        <button type="button" onClick={() => setIsEditingTeam(false)} className="px-4 bg-slate-100 text-slate-600 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition">Cancelar</button>
+                        <div className="flex gap-2 pt-2 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => openDeleteModal(myTeam.id, 'TEAM')}
+                            className="flex-1 py-2 bg-red-50 text-red-600 rounded-lg text-xs font-bold hover:bg-red-100 transition flex items-center justify-center gap-2"
+                          >
+                            <Trash2 size={14} /> Excluir Time
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (confirm("Isso irá recalcular todas as estatísticas (pontos, gols, etc.) do time baseando-se no histórico de partidas. Continuar?")) {
+                              await recalculateTeamStats(myTeam.id, matches, teams);
+                              alert("Estatísticas recalculadas com sucesso!");
+                            }
+                          }}
+                          className="w-full py-2 bg-blue-50 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-100 transition flex items-center justify-center gap-2"
+                        >
+                          <Activity size={14} /> Recalcular Stats
+                        </button>
                       </div>
                     </form>
                   ) : (
                     <>
-                      <h1 className="text-3xl md:text-5xl font-black text-white break-words w-full">
+                      <h1 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white break-words w-full">
                         {myTeam.name}
                       </h1>
-                      <div className="flex items-center gap-4 text-slate-300 font-medium mt-2 flex-wrap">
-                        <span className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded-full text-xs shadow-sm text-white"><MapPin size={14} /> {myTeam.city}</span>
-                        <span className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded-full text-xs shadow-sm text-white"><Heart size={14} /> {fanCount} Torcedores</span>
-                        <span className="flex items-center gap-1 bg-white/20 px-2 py-1 rounded-full text-xs shadow-sm text-white"><Users size={14} /> {myTeam.roster.length} Jogadores</span>
+                      <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400 font-medium mt-2 flex-wrap">
+                        <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full text-xs shadow-sm text-slate-600 dark:text-slate-300"><MapPin size={14} /> {myTeam.city}</span>
+                        <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full text-xs shadow-sm text-slate-600 dark:text-slate-300"><Heart size={14} /> {fanCount} Torcedores</span>
+                        <span className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-full text-xs shadow-sm text-slate-600 dark:text-slate-300"><Users size={14} /> {myTeam.roster.length} Jogadores</span>
                       </div>
                     </>
                   )}
@@ -2488,8 +2689,8 @@ const App: React.FC = () => {
               </div>
 
               {/* STAFF SECTION */}
-              <div className="border-t border-slate-200 pt-6 mt-6">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-3 flex items-center gap-2">
+              <div className="border-t border-slate-200 dark:border-slate-800 pt-6 mt-6">
+                <h4 className="text-xs font-bold text-slate-800 dark:text-white uppercase tracking-wide mb-3 flex items-center gap-2">
                   <Briefcase size={14} /> Comissão Técnica & Diretoria
                 </h4>
                 <div className="flex flex-wrap gap-4">
@@ -2516,7 +2717,7 @@ const App: React.FC = () => {
             <div className="lg:col-span-1 space-y-6">
               <div className="glass-panel rounded-3xl p-6 interactive-card">
                 <div className="flex justify-between items-center mb-6">
-                  <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                  <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2">
                     <Calendar size={20} className="text-blue-500 icon-hover" /> Agenda
                   </h3>
                   <div className="relative">
@@ -2573,7 +2774,7 @@ const App: React.FC = () => {
             <div className="lg:col-span-2 space-y-6">
               {/* TOP SCORERS */}
               <div className="glass-panel rounded-3xl p-6 interactive-card">
-                <h3 className="font-bold text-lg mb-6 flex items-center gap-2 text-white">
+                <h3 className="font-bold text-lg mb-6 flex items-center gap-2 text-slate-800 dark:text-white">
                   <Target size={20} className="text-red-500 icon-hover" /> Artilharia do Time
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2586,7 +2787,7 @@ const App: React.FC = () => {
                       </div>
                       <div className="flex-1">
                         <div className="font-bold text-slate-900 text-sm">{p.name}</div>
-                        <div className="text-[10px] text-slate-500 font-bold uppercase">{p.stats.matchesPlayed} Jogos</div>
+                        <div className="text-[10px] text-slate-600 font-bold uppercase">{p.stats.matchesPlayed} Jogos</div>
                       </div>
                       <div className="text-xl font-black text-emerald-600">{p.stats.goals}</div>
                     </div>
@@ -2601,7 +2802,7 @@ const App: React.FC = () => {
                 {/* TACTICS BOARD */}
                 <div className="glass-panel rounded-3xl p-6 interactive-card">
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold text-lg flex items-center gap-2 text-white">
+                    <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800 dark:text-white">
                       <Crown size={20} className="text-amber-500 icon-hover" /> Formação
                     </h3>
                     {isEditable && (
@@ -2641,7 +2842,7 @@ const App: React.FC = () => {
 
                 {/* ROSTER LIST */}
                 <div className="glass-panel rounded-3xl p-6 interactive-card">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-white">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-slate-800 dark:text-white">
                     <Users size={20} className="text-blue-500 icon-hover" /> Elenco Completo
                   </h3>
                   {myTeam.roster.length > 0 ? (
@@ -2657,7 +2858,7 @@ const App: React.FC = () => {
                             </div>
                             <div>
                               <div className="font-bold text-slate-800 text-sm group-hover:text-emerald-700">{p.name}</div>
-                              <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">{p.position}</div>
+                              <div className="text-[10px] text-slate-600 uppercase font-bold tracking-wider">{p.position}</div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -2826,17 +3027,36 @@ const App: React.FC = () => {
       const assignmentCount = 3;
       myMatches = filtered.slice(0, assignmentCount);
       otherMatches = filtered.slice(assignmentCount);
-    } else if (currentUser!.teamId) {
-      myMatches = filtered.filter(m => m.homeTeamId === currentUser!.teamId || m.awayTeamId === currentUser!.teamId);
-      otherMatches = filtered.filter(m => m.homeTeamId !== currentUser!.teamId && m.awayTeamId !== currentUser!.teamId);
+    } else {
+      // --- NEW LOGIC: FIND ALL USER TEAMS ---
+      // 1. Get all teams where user is in roster OR is creator OR is current context
+      const userTeamIds = activeTeams
+        .filter(t =>
+          t.id === currentUser!.teamId ||
+          t.createdBy === currentUser!.id ||
+          t.roster.some(p => p.userId === currentUser!.id)
+        )
+        .map(t => t.id);
+
+      // 2. Split Matches
+      myMatches = filtered.filter(m => userTeamIds.includes(m.homeTeamId) || userTeamIds.includes(m.awayTeamId));
+      otherMatches = filtered.filter(m => !userTeamIds.includes(m.homeTeamId) && !userTeamIds.includes(m.awayTeamId));
+
+      // 3. Add Followed Teams (for FANS who participate in one team but follow others)
       if (currentUser!.role === UserRole.FAN) {
         const followedTeamIds = socialGraph.filter(s => s.followerId === currentUser!.id).map(s => s.targetId);
         const followedMatches = otherMatches.filter(m => followedTeamIds.includes(m.homeTeamId) || followedTeamIds.includes(m.awayTeamId));
-        myMatches = [...myMatches, ...followedMatches];
-        otherMatches = otherMatches.filter(m => !followedTeamIds.includes(m.homeTeamId) && !followedTeamIds.includes(m.awayTeamId));
+
+        // Merge unique matches
+        const myMatchIds = new Set(myMatches.map(m => m.id));
+        followedMatches.forEach(m => {
+          if (!myMatchIds.has(m.id)) {
+            myMatches.push(m);
+            // Remove from otherMatches
+            otherMatches = otherMatches.filter(om => om.id !== m.id);
+          }
+        });
       }
-    } else {
-      otherMatches = filtered;
     }
     if (currentUser!.role === UserRole.DIRECTOR && matchStatusFilter === MatchStatus.WAITING_ACCEPTANCE) {
       myMatches = filtered;
@@ -3005,7 +3225,7 @@ const App: React.FC = () => {
           tournament={tournament}
           matches={activeMatches}
           teams={activeTeams}
-          news={MOCK_NEWS}
+          news={news}
           arenas={arenas}
           currentUser={currentUser!}
           onClose={() => setSelectedTournamentId(null)}
@@ -3016,6 +3236,7 @@ const App: React.FC = () => {
           onInviteTeam={handleSendTournamentInvite}
           onDeleteTournament={(id) => openDeleteModal(id, 'TOURNAMENT')}
           onUpdateTournament={handleUpdateTournament}
+          onPostNews={handlePostGeneratedNews}
         />
       );
     }
@@ -3115,7 +3336,7 @@ const App: React.FC = () => {
     return (
       <div className="space-y-12 animate-in fade-in duration-500">
         <div className="flex justify-between items-center">
-          <h2 className="text-3xl font-black text-white tracking-tight">Campeonatos</h2>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Campeonatos</h2>
           {canManage && (
             <button
               onClick={() => setIsTournamentModalOpen(true)}
@@ -3128,7 +3349,7 @@ const App: React.FC = () => {
         {/* SECTION 1: MY TOURNAMENTS */}
         {myTournaments.length > 0 && (
           <div className="space-y-4">
-            <h3 className="text-xl font-bold text-white border-l-4 border-emerald-500 pl-3">Meus Campeonatos (Participando/Criado)</h3>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white border-l-4 border-emerald-500 pl-3">Meus Campeonatos (Participando/Criado)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {myTournaments.map(renderTournamentCard)}
             </div>
@@ -3138,7 +3359,7 @@ const App: React.FC = () => {
         {/* SECTION 2: EXPLORE */}
         <div className="space-y-4">
           <div className="flex items-center gap-3">
-            <h3 className="text-xl font-bold text-white border-l-4 border-blue-500 pl-3">Explorar Campeonatos</h3>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white border-l-4 border-blue-500 pl-3">Explorar Campeonatos</h3>
           </div>
 
           {exploreTournaments.length > 0 ? (
@@ -3248,23 +3469,27 @@ const App: React.FC = () => {
 
   const renderNewsView = () => (
     <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <h2 className="text-3xl font-black text-slate-900 tracking-tight mb-8 text-center">Notícias da Liga</h2>
+      <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight mb-8 text-left">Notícias da Liga</h2>
       <div className="grid grid-cols-1 gap-6">
-        {MOCK_NEWS.map(news => (
-          <div key={news.id} className="glass-panel p-8 rounded-3xl hover:shadow-xl transition duration-300 cursor-pointer group interactive-card">
+        {news.map(n => (
+          <div key={n.id} className="glass-panel p-8 rounded-3xl hover:shadow-xl transition duration-300 cursor-pointer group interactive-card" onClick={() => setSelectedNewsItem(n)}>
             <div className="flex items-center gap-3 mb-4">
-              <span className="bg-emerald-100 text-emerald-700 text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide">{news.category}</span>
-              <span className="text-slate-400 text-xs font-medium">{new Date(news.date).toLocaleDateString('pt-BR')}</span>
+              <span className="bg-emerald-100 text-emerald-700 text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide">{n.category}</span>
+              <span className="text-slate-500 dark:text-slate-400 text-xs font-medium">{new Date(n.date).toLocaleDateString('pt-BR')}</span>
             </div>
-            <h3 className="text-2xl font-bold text-slate-900 mb-3 group-hover:text-emerald-700 transition">{news.title}</h3>
-            <p className="text-slate-600 leading-relaxed">{news.excerpt}</p>
-            <div className="mt-6 flex items-center text-emerald-600 font-bold text-sm opacity-0 group-hover:opacity-100 transition transform translate-y-2 group-hover:translate-y-0">
-              Ler mais <ArrowLeft className="rotate-180 ml-2" size={16} />
+            <div className="flex flex-col sm:flex-row gap-6">
+              <div className="flex-1">
+                <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-3 group-hover:text-emerald-500 transition leading-tight">{n.title}</h3>
+                <p className="text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-3 text-sm">{n.excerpt}</p>
+                <div className="mt-4 flex items-center text-emerald-600 font-bold text-sm opacity-100 transition">
+                  Ler matéria completa <ArrowLeft className="rotate-180 ml-2" size={16} />
+                </div>
+              </div>
             </div>
           </div>
         ))}
       </div>
-      {MOCK_NEWS.length === 0 && (
+      {news.length === 0 && (
         <div className="py-20 text-center text-slate-400 glass-panel rounded-3xl border-dashed border-2 border-slate-200 interactive-card">Nenhuma notícia.</div>
       )}
     </div>
@@ -3443,6 +3668,41 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* MATCH DETAIL VIEW OVERLAY */}
+      {selectedMatchId && !isMatchModalOpen && (
+        (() => {
+          const m = matches.find(x => x.id === selectedMatchId);
+          if (!m) return null;
+          const hTeam = getTeam(m.homeTeamId);
+          const aTeam = getTeam(m.awayTeamId);
+          const arena = getArena(m.arenaId);
+
+          return (
+            <MatchDetailView
+              match={m}
+              homeTeam={hTeam}
+              awayTeam={aTeam}
+              arena={arena}
+              currentUser={currentUser!}
+              onClose={() => setSelectedMatchId(null)}
+              onAddEvent={handleAddEvent}
+              onViewPlayer={(p) => { if (p.userId) setViewingProfileId(p.userId); }}
+              onSendMessage={handleSendMessage}
+              onSaveMatchTactics={handleSaveMatchTactics}
+              onAddMedia={handleAddMatchMedia}
+              onFinishMatch={handleFinishMatch}
+              onUpdateStreams={handleUpdateStreams}
+              onStartBroadcast={() => handleStartBroadcast(m.id)}
+              onUpdateStatus={(id, status) => handleUpdateScore(id, m.homeScore, m.awayScore, status)}
+              onPostNews={handlePostGeneratedNews}
+            />
+          );
+        })()
+      )}
+
+      {/* GLOBAL BROADCASTER OVERLAY (Persistent through navigation) */}
+      {/* Agora Broadcaster Removed - Feature Disabled temporarily */}
+
       {/* --- MODALS --- */}
 
       {/* 1. MATCH MODAL */}
@@ -3596,9 +3856,14 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 mt-2">
-                {editingTeam ? 'Atualizar Time' : 'Criar Time'}
-              </button>
+              <div className="flex gap-2 mt-4">
+                {editingTeam && (
+                  <button type="button" onClick={() => openDeleteModal(editingTeam.id, 'TEAM')} className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl hover:bg-red-100 transition">Excluir</button>
+                )}
+                <button type="submit" className="flex-[2] bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200">
+                  {editingTeam ? 'Atualizar' : 'Criar Time'}
+                </button>
+              </div>
             </form>
           </div >
         </div >
@@ -3809,6 +4074,79 @@ const App: React.FC = () => {
           </div>
         )
       }
+
+      {/* GLOBAL NEWS MODAL */}
+      {selectedNewsItem && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 mx-auto w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto relative animate-in zoom-in-95">
+            {/* Header - No Image, just Gradient */}
+            <div className="h-48 relative bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col justify-end p-6">
+              <button
+                onClick={() => setSelectedNewsItem(null)}
+                className="absolute top-4 right-4 bg-white/10 backdrop-blur text-white p-2 rounded-full hover:bg-white/20 transition"
+              >
+                <X size={24} />
+              </button>
+              <div>
+                <span className="bg-emerald-500 text-white text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide mb-3 inline-block shadow-md">{selectedNewsItem.category}</span>
+                <h2 className="text-2xl md:text-3xl font-black text-white leading-tight drop-shadow-md">{selectedNewsItem.title}</h2>
+              </div>
+            </div>
+
+            {/* Content Body */}
+            <div className="p-8 space-y-6">
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+                    <User size={16} className="text-slate-500 dark:text-slate-400" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white">{selectedNewsItem.author || 'Redação LocalLegends'}</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(selectedNewsItem.date).toLocaleDateString('pt-BR')} • Leitura de 2 min</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Main Text */}
+              <div className="prose dark:prose-invert prose-emerald max-w-none">
+                <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-300 leading-relaxed text-lg">
+                  {selectedNewsItem.content || selectedNewsItem.excerpt}
+                </p>
+              </div>
+
+              {/* External Link / Stream */}
+              {selectedNewsItem.externalLink && (
+                <div className="my-6">
+                  <a href={selectedNewsItem.externalLink} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-3 w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-red-500/30 transition transform hover:scale-[1.02]">
+                    <Video size={24} />
+                    Assistir Transmissão / Vídeo
+                  </a>
+                </div>
+              )}
+
+              {/* Media Gallery */}
+              {selectedNewsItem.media && selectedNewsItem.media.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-2"><ImageIcon size={18} /> Galeria de Mídia</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    {selectedNewsItem.media.map((media, idx) => (
+                      <div key={idx} className="rounded-xl overflow-hidden h-40 bg-slate-100 dark:bg-slate-800 relative group cursor-pointer" onClick={() => window.open(media.url, '_blank')}>
+                        {media.type === 'VIDEO' ? (
+                          <div className="w-full h-full flex items-center justify-center bg-black/10">
+                            <Play size={32} className="text-white opacity-80" />
+                          </div>
+                        ) : (
+                          <img src={media.url} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" alt="" />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* GLOBAL DELETE CONFIRMATION MODAL */}
       {

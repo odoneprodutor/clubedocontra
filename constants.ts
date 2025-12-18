@@ -69,3 +69,7 @@ export const SAFE_TEAM: Team = {
   createdBy: '',
   isDeleted: false
 };
+
+// --- STREAMING ---
+export const AGORA_APP_ID = '508d891d38b74f42ac8acace1214d8c9';
+

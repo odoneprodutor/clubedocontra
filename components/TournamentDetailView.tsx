@@ -1,7 +1,8 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Tournament, Match, Team, NewsItem, UserRole, MatchStatus, MatchType, MatchEventType, Arena, CurrentUser, SportType } from '../types';
-import { ArrowLeft, ChevronLeft, ChevronRight, Trophy, Calendar, Medal, Newspaper, Target, Users, UserPlus, X, Edit, Trash2, Save, MapPin } from 'lucide-react';
+import { AIService } from '../services/gemini';
+import { ArrowLeft, ChevronLeft, ChevronRight, Trophy, Calendar, Medal, Newspaper, Target, Users, UserPlus, X, Edit, Trash2, Save, MapPin, Copy, Sparkles, Loader } from 'lucide-react';
 import { SPORT_TYPE_DETAILS } from '../constants';
 import MatchCard from './MatchCard';
 import StandingsTable from './StandingsTable';
@@ -21,6 +22,7 @@ interface TournamentDetailViewProps {
   onInviteTeam: (tournamentId: string, teamId: string) => void;
   onDeleteTournament: (tournamentId: string) => void;
   onUpdateTournament: (updatedTournament: Tournament) => void;
+  onPostNews: (content: string, context: { tournamentId: string }) => void;
 }
 
 const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
@@ -37,8 +39,27 @@ const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
   onTeamClick,
   onInviteTeam,
   onDeleteTournament,
-  onUpdateTournament
+  onUpdateTournament,
+  onPostNews
 }) => {
+  // State for AI News Modal
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [aiContent, setAiContent] = useState('');
+  const [isLoadingAI, setIsLoadingAI] = useState(false);
+
+  const handleGenerateRoundNews = async () => {
+    setIsLoadingAI(true);
+    setShowAIModal(true);
+    setAiContent("Analisando os jogos da rodada...");
+    try {
+      const news = await AIService.generateTournamentNews(tournament.name, roundMatches, teams);
+      setAiContent(news);
+    } catch (error) {
+      setAiContent("Erro ao gerar notícia. Tente novamente.");
+    } finally {
+      setIsLoadingAI(false);
+    }
+  };
   // State for Invite Modal
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [teamToInvite, setTeamToInvite] = useState<string>('');
@@ -244,13 +265,22 @@ const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
               <span className="text-sm text-slate-400 font-medium uppercase tracking-widest">Visualizando</span>
               <span className="text-lg font-bold text-slate-900">{selectedRound || 'Nenhuma rodada'}</span>
             </div>
-            <button
-              onClick={handleNextRound}
-              disabled={currentRoundIndex === rounds.length - 1}
-              className="p-2 hover:bg-slate-50 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed text-slate-600"
-            >
-              <ChevronRight size={24} />
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleGenerateRoundNews}
+                className="p-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 rounded-lg transition"
+                title="Gerar Resenha da Rodada com IA"
+              >
+                <Sparkles size={20} />
+              </button>
+              <button
+                onClick={handleNextRound}
+                disabled={currentRoundIndex === rounds.length - 1}
+                className="p-2 hover:bg-slate-50 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed text-slate-600"
+              >
+                <ChevronRight size={24} />
+              </button>
+            </div>
           </div>
 
           {/* Match List */}
@@ -489,6 +519,60 @@ const TournamentDetailView: React.FC<TournamentDetailViewProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* AI NEWS MODAL */}
+      {showAIModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="bg-slate-900 p-6 flex justify-between items-center text-white shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="bg-emerald-500 p-2 rounded-lg">
+                  {isLoadingAI ? <Loader className="animate-spin" size={24} /> : <Sparkles size={24} />}
+                </div>
+                <div>
+                  <h3 className="font-bold text-xl">Resenha da Rodada {selectedRound}</h3>
+                  <p className="text-slate-400 text-xs font-medium uppercase tracking-wider">IA Jornalista</p>
+                </div>
+              </div>
+              {!isLoadingAI && <button onClick={() => setShowAIModal(false)}><X size={24} className="text-slate-400 hover:text-white" /></button>}
+            </div>
+
+            <div className="p-8 overflow-y-auto grow">
+              {isLoadingAI ? (
+                <div className="space-y-4 animate-pulse">
+                  <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+                  <div className="h-4 bg-slate-200 rounded w-full"></div>
+                  <div className="h-4 bg-slate-200 rounded w-5/6"></div>
+                </div>
+              ) : (
+                <div className="prose prose-slate max-w-none">
+                  <p className="whitespace-pre-wrap text-lg leading-relaxed text-slate-700">{aiContent}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 flex gap-2 justify-end bg-white shrink-0">
+              {!isLoadingAI && (
+                <>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(aiContent); alert("Copiado!"); }}
+                    className="flex items-center gap-2 px-4 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-lg text-sm transition"
+                  >
+                    <Copy size={16} /> Copiar
+                  </button>
+                  <button
+                    onClick={() => { onPostNews(aiContent, { tournamentId: tournament.id }); setShowAIModal(false); }}
+                    className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white font-bold hover:bg-emerald-500 rounded-lg text-sm transition shadow-lg shadow-emerald-200"
+                  >
+                    <Newspaper size={16} /> Postar no App
+                  </button>
+                </>
+              )}
+              <button onClick={() => setShowAIModal(false)} className="px-6 py-2 bg-slate-900 text-white font-bold rounded-lg text-sm hover:bg-slate-800 transition">Fechar</button>
+            </div>
           </div>
         </div>
       )}

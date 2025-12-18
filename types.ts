@@ -179,7 +179,13 @@ export interface Match extends BaseEntity {
   homeTactics?: TacticalPosition[];
   awayTactics?: TacticalPosition[];
   // Streaming & Media
-  youtubeVideoId?: string; // Extracted ID for embed
+  youtubeVideoId?: string; // Legacy/Single Stream
+  streams?: { // New: Multiple options
+    id: string;
+    provider: 'YOUTUBE' | 'TWITCH' | 'AGORA' | 'OTHER';
+    identifier: string; // The ID or URL
+    label: string; // "Opção 1", "Camera Principal", etc.
+  }[];
   media: MatchMedia[];
   city?: string; // Standardized city if neutral ground or specific
 }
@@ -190,8 +196,13 @@ export interface NewsItem {
   excerpt: string;
   date: string;
   category: string;
+  content?: string; // New: Full content
+  imageUrl?: string; // New: Hero image
+  author?: string; // New: Journalist or AI
   teamId?: string; // For personalized feed
   tournamentId?: string; // For championship specific feed
+  media?: MatchMedia[]; // Attached media from match
+  externalLink?: string; // Stream link
 }
 
 export type AppView = 'HOME' | 'TEAMS' | 'MATCHES' | 'TOURNAMENTS' | 'ARENAS' | 'NEWS' | 'PROFILE';

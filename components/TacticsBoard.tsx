@@ -8,18 +8,26 @@ interface TacticsBoardProps {
   isEditable: boolean;
   onSave?: (newPositions: TacticalPosition[]) => void;
   onPlayerClick?: (player: any) => void;
+  // Controlled Mode Props
+  positions?: TacticalPosition[];
+  onPositionsChange?: (newPositions: TacticalPosition[]) => void;
 }
 
-const TacticsBoard: React.FC<TacticsBoardProps> = ({ team, isEditable, onSave, onPlayerClick }) => {
-  const [positions, setPositions] = useState<TacticalPosition[]>(team.tacticalFormation);
+const TacticsBoard: React.FC<TacticsBoardProps> = ({ team, isEditable, onSave, onPlayerClick, positions: externalPositions, onPositionsChange }) => {
+  const [internalPositions, setInternalPositions] = useState<TacticalPosition[]>(team.tacticalFormation);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragStartPos, setDragStartPos] = useState<{ x: number, y: number } | null>(null);
   const boardRef = useRef<HTMLDivElement>(null);
 
-  // Sync props if team changes
+  // Use external positions if provided, otherwise internal
+  const activePositions = externalPositions || internalPositions;
+
+  // Sync internal state if team changes (only for uncontrolled mode)
   useEffect(() => {
-    setPositions(team.tacticalFormation);
-  }, [team.id]);
+    if (!externalPositions) {
+      setInternalPositions(team.tacticalFormation);
+    }
+  }, [team.id, externalPositions]);
 
   const handleMouseDown = (e: React.MouseEvent, playerId: string) => {
     // START DRAG OR CLICK
@@ -40,7 +48,7 @@ const TacticsBoard: React.FC<TacticsBoardProps> = ({ team, isEditable, onSave, o
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!draggingId || !boardRef.current) return;
+    if (!draggingId || !boardRef.current || !isEditable) return;
 
     const rect = boardRef.current.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
@@ -50,9 +58,15 @@ const TacticsBoard: React.FC<TacticsBoardProps> = ({ team, isEditable, onSave, o
     const clampedX = Math.max(0, Math.min(100, x));
     const clampedY = Math.max(0, Math.min(100, y));
 
-    setPositions(prev => prev.map(p =>
+    const nextPositions = activePositions.map(p =>
       p.playerId === draggingId ? { ...p, x: clampedX, y: clampedY } : p
-    ));
+    );
+
+    if (onPositionsChange) {
+      onPositionsChange(nextPositions);
+    } else {
+      setInternalPositions(nextPositions);
+    }
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
@@ -73,7 +87,7 @@ const TacticsBoard: React.FC<TacticsBoardProps> = ({ team, isEditable, onSave, o
   };
 
   const handleSave = () => {
-    if (onSave) onSave(positions);
+    if (onSave) onSave(activePositions);
   };
 
   return (
@@ -104,7 +118,7 @@ const TacticsBoard: React.FC<TacticsBoardProps> = ({ team, isEditable, onSave, o
         <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-32 h-16 border-2 border-b-0 border-white opacity-30"></div>
 
         {/* Players */}
-        {positions.map((pos) => {
+        {activePositions.map((pos) => {
           const player = team.roster.find(p => p.id === pos.playerId);
           if (!player) return null;
 

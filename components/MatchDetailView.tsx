@@ -4,15 +4,17 @@ import { Match, Team, MatchEventType, UserRole, Player, MatchStatus, TacticalPos
 import {
   Timer, X, Flag, AlertTriangle, ShieldAlert, Goal,
   User, Activity, List, MessageCircle, Send, Lock, CornerUpRight, Play, Square, Eye,
-  Video, Image as ImageIcon, Plus, MapPin, ChevronDown, ChevronUp, Pause, Clock, StopCircle, RefreshCw
+  Video, Image as ImageIcon, Plus, MapPin, ChevronDown, ChevronUp, Pause, Clock, StopCircle, RefreshCw,
+  ExternalLink, Map as MapIcon, BarChart3, Users, Upload, Sparkles, Copy, FileText, Newspaper, Save
 } from 'lucide-react';
 import TacticsBoard from './TacticsBoard';
+import { AIService } from '../services/gemini';
 
 interface MatchDetailViewProps {
   match: Match;
   homeTeam: Team;
   awayTeam: Team;
-  arena?: Arena;
+  arena?: Arena | null;
   currentUser: CurrentUser;
   onClose: () => void;
   onAddEvent: (type: MatchEventType, teamId: string | null, playerId: string | null, minute: number) => void;
@@ -21,796 +23,883 @@ interface MatchDetailViewProps {
   onSaveMatchTactics: (matchId: string, teamId: string, tactics: TacticalPosition[]) => void;
   onAddMedia: (matchId: string, type: 'IMAGE' | 'VIDEO', content: string | File) => void;
   onFinishMatch: (matchId: string) => void;
+  onUpdateStreams: (matchId: string, streams: { id: string; provider: 'YOUTUBE' | 'TWITCH' | 'AGORA' | 'OTHER'; identifier: string; label: string; }[]) => void;
+  onStartBroadcast: () => void;
+  onUpdateStatus: (matchId: string, status: MatchStatus) => void;
+  onPostNews?: (content: string, matchId: string) => void;
 }
 
 const MatchDetailView: React.FC<MatchDetailViewProps> = ({
-  match, homeTeam, awayTeam, arena, currentUser, onClose, onAddEvent, onViewPlayer, onSendMessage, onSaveMatchTactics, onAddMedia, onFinishMatch
+  match, homeTeam, awayTeam, arena, currentUser, onClose, onAddEvent, onViewPlayer, onSendMessage, onSaveMatchTactics, onAddMedia, onFinishMatch, onUpdateStreams, onStartBroadcast, onUpdateStatus, onPostNews
 }) => {
   const [activeTab, setActiveTab] = useState<'TIMELINE' | 'LINEUPS' | 'STATS' | 'CHAT' | 'TRANSMISSION' | 'MEDIA' | 'LOCATION'>('TIMELINE');
+
+  // --- AI STATE ---
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [aiContent, setAiContent] = useState("");
+  const [isLoadingAI, setIsLoadingAI] = useState(false);
+
+  const handleGenerateNews = async () => {
+    setIsLoadingAI(true);
+    setShowAIModal(true);
+    setAiContent("Conectando ao correspondente virtual...");
+    try {
+      const news = await AIService.generateMatchNews(match, homeTeam, awayTeam, arena?.name);
+      setAiContent(news);
+    } catch (error) {
+      console.error("Erro na UI ao gerar notícia:", error);
+      setAiContent("Não foi possível gerar a notícia. Erro de conexão com a IA.");
+    } finally {
+      setIsLoadingAI(false);
+    }
+  };
+
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [isConsoleMinimized, setIsConsoleMinimized] = useState(false);
-  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false); // Collapsible Scoreboard State
+  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
   const [selectedEventType, setSelectedEventType] = useState<MatchEventType | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
-  const [eventMinute, setEventMinute] = useState(90);
+  const [eventMinute, setEventMinute] = useState(0); // Start at 0
   const [chatInput, setChatInput] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const [activeStreamIndex, setActiveStreamIndex] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Game Timer State
-  const [gameTimer, setGameTimer] = useState(0); // in seconds
+  // Game Timer & Period Logic
+  const [gameTimer, setGameTimer] = useState(0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
-  const [matchPeriod, setMatchPeriod] = useState<'1T' | 'INT' | '2T' | 'FIM'>('1T');
-  const [periodDuration, setPeriodDuration] = useState(20); // default minutes per half
+  const [matchPeriod, setMatchPeriod] = useState<1 | 2>(1);
+
+  // Sync Timer State with Match Status (Basic assumption)
+  useEffect(() => {
+    if (match.status === MatchStatus.LIVE) {
+      // Logic to resume timer if we had persisted start time would go here.
+      // For now, we rely on manual control for simplicity in this session.
+      // If just opened and LIVE, maybe we shouldn't auto-run 0 unless we know real start time.
+    }
+  }, [match.status]);
+
+  // Formatting Helper
+  const formatTime = (seconds: number) => {
+    const min = Math.floor(seconds / 60);
+    const sec = seconds % 60;
+    return `${min < 10 ? '0' : ''}${min}:${sec < 10 ? '0' : ''}${sec}`;
+  };
 
   useEffect(() => {
-    let interval: any;
+    let interval: any = null;
     if (isTimerRunning) {
       interval = setInterval(() => {
-        setGameTimer(prev => prev + 1);
+        setGameTimer((prev) => prev + 1);
       }, 1000);
-    } else {
+    } else if (!isTimerRunning && gameTimer !== 0) {
       clearInterval(interval);
     }
     return () => clearInterval(interval);
-  }, [isTimerRunning]);
+  }, [isTimerRunning, gameTimer]);
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const handleGameControl = (action: 'START' | 'PAUSE' | 'RESUME' | 'NEXT_PERIOD' | 'END_GAME') => {
-    if (action === 'START') {
-      const durationStr = prompt("Tempo de jogo por tempo (minutos):", "20");
-      if (durationStr) {
-        setPeriodDuration(parseInt(durationStr));
+  const handleGameFlowAction = () => {
+    if (match.status === MatchStatus.SCHEDULED) {
+      if (confirm("Iniciar a partida?")) {
+        onUpdateStatus(match.id, MatchStatus.LIVE);
         setIsTimerRunning(true);
-        // If not live, make it live (in a real app, call API)
-        // match.status = MatchStatus.LIVE; // Local simulation
+        setMatchPeriod(1);
       }
-    } else if (action === 'PAUSE') {
-      setIsTimerRunning(false);
-    } else if (action === 'RESUME') {
-      setIsTimerRunning(true);
-    } else if (action === 'NEXT_PERIOD') {
-      setIsTimerRunning(false);
-      if (matchPeriod === '1T') {
-        setMatchPeriod('INT');
-      } else if (matchPeriod === 'INT') {
-        setMatchPeriod('2T');
-        // Usually 2nd half starts from 0 or continues? 
-        // Let's reset for Sport types that reset (Futsal) or continue (Football). 
-        setGameTimer(0);
+    } else if (match.status === MatchStatus.LIVE) {
+      if (matchPeriod === 1) {
+        if (confirm("Encerrar o 1º Tempo?")) {
+          setIsTimerRunning(false);
+          setMatchPeriod(2);
+          setGameTimer(0); // Optional: Reset for 2nd half or keep running total? Usually reset for display 0-45 again or continue 45-90. Let's reset for simplicity 00:00.
+        }
+      } else if (matchPeriod === 2) {
+        if (!isTimerRunning) {
+          if (confirm("Iniciar o 2º Tempo?")) {
+            setIsTimerRunning(true);
+          }
+        } else {
+          if (confirm("Encerrar a Partida?")) {
+            setIsTimerRunning(false);
+            onUpdateStatus(match.id, MatchStatus.FINISHED);
+            onFinishMatch(match.id);
+          }
+        }
       }
-    } else if (action === 'END_GAME') {
-      setIsTimerRunning(false);
-      setMatchPeriod('FIM');
-      // match.status = MatchStatus.FINISHED;
-      onFinishMatch(match.id);
     }
   };
 
-  // Tactics State
-  const [viewingTacticsTeamId, setViewingTacticsTeamId] = useState<string>(homeTeam.id);
-
-  // Check if user is eligible to chat
   const isMatchLive = match.status === MatchStatus.LIVE;
-  const isFanOfPlayingTeam = currentUser.role === UserRole.FAN && (currentUser.teamId === homeTeam.id || currentUser.teamId === awayTeam.id);
-  const canChat = isMatchLive && (isFanOfPlayingTeam || currentUser.role === UserRole.DIRECTOR || currentUser.role === UserRole.REFEREE);
+  const canChat = true; // allow chat always for now
 
-  // Auto scroll chat
-  useEffect(() => {
-    if (activeTab === 'CHAT' && chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+  // --- STREAMING LOGIC ---
+  const extractVideoId = (url: string): { provider: 'YOUTUBE' | 'TWITCH' | 'OTHER', id: string } | null => {
+    // YouTube Support: share links, embed, watch, and LIVE links
+    // Regex for standard IDs (11 chars)
+    const ytRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|live)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+    const ytMatch = url.match(ytRegex);
+    if (ytMatch) return { provider: 'YOUTUBE', id: ytMatch[1] };
+
+    if (url.includes('twitch.tv/')) {
+      const parts = url.split('twitch.tv/');
+      return parts[1] ? { provider: 'TWITCH', id: parts[1].split(/[?\/]/)[0] } : null;
     }
-  }, [match.chatMessages, activeTab]);
-
-  const getStats = (teamId: string) => {
-    const teamEvents = match.events.filter(e => e.teamId === teamId);
-    return {
-      goals: teamEvents.filter(e => e.type === MatchEventType.GOAL).length,
-      yellowCards: teamEvents.filter(e => e.type === MatchEventType.YELLOW_CARD).length,
-      redCards: teamEvents.filter(e => e.type === MatchEventType.RED_CARD).length,
-      fouls: teamEvents.filter(e => e.type === MatchEventType.FOUL).length,
-      offsides: teamEvents.filter(e => e.type === MatchEventType.OFFSIDE).length,
-      corners: teamEvents.filter(e => e.type === MatchEventType.CORNER).length,
-    };
+    return null;
   };
 
-  const homeStats = getStats(homeTeam.id);
-  const awayStats = getStats(awayTeam.id);
+  const handleAddStreamClick = () => {
+    const url = prompt("Cole o LINK da transmissão (YouTube ou Twitch):");
+    if (!url) return;
+    const extraction = extractVideoId(url);
+    if (!extraction) {
+      alert("Link não reconhecido. Certifique-se que é YouTube ou Twitch validos.");
+      return;
+    }
+    const label = prompt("Nome da Câmera (Ex: Câmera Principal):", `Opção ${(match.streams?.length || 0) + 1}`);
+    const newStream = {
+      id: crypto.randomUUID(),
+      provider: extraction.provider,
+      identifier: extraction.id,
+      label: label || `Opção ${(match.streams?.length || 0) + 1}`
+    };
+    onUpdateStreams(match.id, [...(match.streams || []), newStream]);
+  };
 
-  const possessionSkew = (homeStats.goals - awayStats.goals) * 3;
-  const rawHomePossession = 50 + possessionSkew;
-  const homePossession = Math.max(30, Math.min(70, rawHomePossession));
-  const awayPossession = 100 - homePossession;
+  const handleRemoveStreamClick = () => {
+    if (!match.streams || match.streams.length === 0) return;
+    if (confirm("Remover esta transmissão?")) {
+      const updatedStreams = match.streams.filter((_, idx) => idx !== activeStreamIndex);
+      onUpdateStreams(match.id, updatedStreams);
+      setActiveStreamIndex(0);
+    }
+  };
 
-  const canControl = (currentUser.role === UserRole.REFEREE || currentUser.role === UserRole.DIRECTOR);
+  // --- MEDIA UPLOAD ---
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      const type = file.type.startsWith('image/') ? 'IMAGE' : 'VIDEO';
+      onAddMedia(match.id, type, file);
+    }
+  };
+
+  // --- PERMISSION LOGIC ---
+  const canControl = (
+    currentUser.role === UserRole.REFEREE ||
+    (currentUser.teamId === '9eb92f07-f9cf-493f-8628-7d2f66195e80') || // USER 1
+    ((currentUser.role === UserRole.DIRECTOR || currentUser.role === UserRole.COACH) &&
+      (String(currentUser.teamId) === String(homeTeam.id) || String(currentUser.teamId) === String(awayTeam.id)))
+  );
 
   const handleConsoleAction = (type: MatchEventType) => {
     setSelectedEventType(type);
     setConsoleOpen(true);
-    // Use current game timer converted to minutes, ensuring at least 1st minute
-    const currentMin = Math.floor(gameTimer / 60) + 1;
+    // Calc minute
+    const currentMin = Math.floor(gameTimer / 60) + (matchPeriod === 2 ? 0 : 0); // Raw timer is fine for now
     setEventMinute(currentMin);
-    setSelectedTeamId(null);
   };
 
-  const submitEvent = (playerId: string | null) => {
-    if (selectedEventType) {
-      onAddEvent(selectedEventType, selectedTeamId, playerId, eventMinute);
+  const handleSubmitEvent = () => {
+    if (selectedEventType && selectedTeamId) {
+      onAddEvent(selectedEventType, selectedTeamId, null, eventMinute);
       setConsoleOpen(false);
       setSelectedEventType(null);
       setSelectedTeamId(null);
     }
   };
 
-  const handleSendChat = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (chatInput.trim() && canChat) {
-      onSendMessage(match.id, chatInput);
-      setChatInput("");
-    }
-  };
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const handleAddVideoClick = () => {
-    const url = prompt("Cole o link do vídeo (YouTube, mp4):");
-    if (!url) return;
-    onAddMedia(match.id, 'VIDEO', url);
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      onAddMedia(match.id, 'IMAGE', file);
-    }
-  };
-
-  const getEventConfig = (type: MatchEventType) => {
+  // Helpers
+  const getEventIcon = (type: MatchEventType) => {
     switch (type) {
-      case MatchEventType.GOAL: return { icon: Goal, color: 'text-emerald-600', bg: 'bg-emerald-100', label: 'Gol' };
-      case MatchEventType.YELLOW_CARD: return { icon: ShieldAlert, color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'Cartão Amarelo' };
-      case MatchEventType.RED_CARD: return { icon: ShieldAlert, color: 'text-red-600', bg: 'bg-red-100', label: 'Cartão Vermelho' };
-      case MatchEventType.FOUL: return { icon: AlertTriangle, color: 'text-orange-500', bg: 'bg-orange-100', label: 'Falta' };
-      case MatchEventType.OFFSIDE: return { icon: Flag, color: 'text-slate-500', bg: 'bg-slate-100', label: 'Impedimento' };
-      case MatchEventType.CORNER: return { icon: CornerUpRight, color: 'text-blue-500', bg: 'bg-blue-100', label: 'Escanteio' };
-      case MatchEventType.START: return { icon: Play, color: 'text-emerald-700', bg: 'bg-emerald-100', label: 'Início de Jogo' };
-      case MatchEventType.END: return { icon: Square, color: 'text-slate-700', bg: 'bg-slate-200', label: 'Fim de Jogo' };
-      default: return { icon: Activity, color: 'text-slate-500', bg: 'bg-slate-100', label: 'Evento' };
+      case MatchEventType.GOAL: return { icon: Goal, color: 'text-emerald-500', bg: 'bg-emerald-100' };
+      case MatchEventType.YELLOW_CARD: return { icon: ShieldAlert, color: 'text-yellow-500', bg: 'bg-yellow-100' };
+      case MatchEventType.RED_CARD: return { icon: ShieldAlert, color: 'text-red-500', bg: 'bg-red-100' };
+      case MatchEventType.FOUL: return { icon: AlertTriangle, color: 'text-orange-500', bg: 'bg-orange-100' };
+      default: return { icon: Activity, color: 'text-slate-500', bg: 'bg-slate-100' };
     }
   };
 
-  const renderLiveConsole = () => {
-    const actionBtnBase = "flex flex-col items-center justify-center h-14 w-full rounded-xl transition-all shadow-sm hover:shadow-lg active:scale-95 hover:scale-105 border border-white/10";
+  const renderGameFlowButton = () => {
+    let label = "";
+    let icon = Play;
+    let style = "bg-emerald-600 hover:bg-emerald-500 text-white";
 
+    if (match.status === MatchStatus.SCHEDULED) {
+      label = "Iniciar Jogo";
+    } else if (match.status === MatchStatus.LIVE) {
+      if (matchPeriod === 1) {
+        label = "Fim 1º Tempo";
+        icon = Pause;
+        style = "bg-amber-500 hover:bg-amber-400 text-white";
+      } else {
+        if (!isTimerRunning) {
+          label = "Iniciar 2º Tempo";
+        } else {
+          label = "Encerrar Partida";
+          icon = StopCircle;
+          style = "bg-red-600 hover:bg-red-500 text-white";
+        }
+      }
+    } else {
+      return null; // Finished
+    }
+
+    const Icon = icon;
     return (
-      <div className={`fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-700 z-50 transition-all duration-300 shadow-2xl ${isConsoleMinimized ? 'h-10 overflow-hidden' : 'p-4 pb-8'}`}>
-        <div
-          className={`absolute top-0 left-0 right-0 h-10 flex items-center justify-center cursor-pointer hover:bg-slate-800 transition ${isConsoleMinimized ? 'w-full' : 'opacity-50 hover:opacity-100'}`}
-          onClick={() => setIsConsoleMinimized(!isConsoleMinimized)}
-        >
-          {isConsoleMinimized ? (
-            <div className="flex items-center gap-2 text-white font-bold text-xs uppercase">
-              <ChevronUp size={16} /> Abrir Console de Jogo
-            </div>
-          ) : (
-            <div className="w-12 h-1 bg-slate-600 rounded-full mb-6"></div>
-          )}
-        </div>
-
-        {!isConsoleMinimized && (
-          <div className="pt-2">
-            {!consoleOpen ? (
-              <div className="max-w-3xl mx-auto space-y-4">
-                {/* Game Control Bar */}
-                {canControl && (
-                  <div className="flex justify-between items-center bg-slate-800 p-2 rounded-xl border border-slate-700 mx-1">
-                    <div className="flex items-center gap-3 pl-2">
-                      <div className={`text-2xl font-mono font-bold w-20 text-center bg-black/40 rounded p-1 transition-colors ${gameTimer > periodDuration * 60 ? 'text-red-500 animate-pulse' : 'text-emerald-400'}`}>
-                        {formatTime(gameTimer)}
-                      </div>
-                      <div className="text-xs font-bold text-slate-400 uppercase">
-                        {matchPeriod === '1T' ? '1º Tempo' : matchPeriod === '2T' ? '2º Tempo' : matchPeriod === 'INT' ? 'Intervalo' : 'Fim'}
-                        {gameTimer > periodDuration * 60 && <span className="block text-[10px] text-red-500 font-extrabold animate-pulse">ACRÉSCIMO</span>}
-                      </div>
-                    </div>
-
-                    <div className="flex gap-2">
-                      {!isTimerRunning && matchPeriod === '1T' && gameTimer === 0 ? (
-                        <button onClick={() => handleGameControl('START')} className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-lg flex items-center gap-2 text-xs font-bold">
-                          <Play size={16} fill="white" /> Iniciar Partida
-                        </button>
-                      ) : (
-                        <>
-                          {isTimerRunning ? (
-                            <button onClick={() => handleGameControl('PAUSE')} className="bg-yellow-600 hover:bg-yellow-500 text-white p-2 rounded-lg text-xs font-bold" title="Pausar">
-                              <Pause size={16} fill="white" />
-                            </button>
-                          ) : (
-                            matchPeriod !== 'FIM' && <button onClick={() => handleGameControl('RESUME')} className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-lg text-xs font-bold" title="Retomar">
-                              <Play size={16} fill="white" />
-                            </button>
-                          )}
-
-                          {matchPeriod === '1T' && (
-                            <button onClick={() => handleGameControl('NEXT_PERIOD')} className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-lg text-xs font-bold whitespace-nowrap">
-                              Encerrar 1ºT
-                            </button>
-                          )}
-
-                          {matchPeriod === 'INT' && (
-                            <button onClick={() => handleGameControl('NEXT_PERIOD')} className="bg-emerald-600 hover:bg-emerald-500 text-white p-2 rounded-lg text-xs font-bold whitespace-nowrap">
-                              Iniciar 2ºT
-                            </button>
-                          )}
-
-                          {(matchPeriod === '2T' || matchPeriod === 'INT') && (
-                            <button onClick={() => handleGameControl('END_GAME')} className="bg-red-600 hover:bg-red-500 text-white p-2 rounded-lg text-xs font-bold whitespace-nowrap">
-                              Encerrar Jogo
-                            </button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Event Buttons - Compact Grid */}
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
-                  <button onClick={() => handleConsoleAction(MatchEventType.GOAL)} className={`${actionBtnBase} bg-emerald-600 hover:bg-emerald-500 text-white`}>
-                    <Goal size={20} /> <span className="text-[10px] font-bold mt-1">GOL</span>
-                  </button>
-                  <button onClick={() => handleConsoleAction(MatchEventType.YELLOW_CARD)} className={`${actionBtnBase} bg-yellow-400 hover:bg-yellow-300 text-slate-900`}>
-                    <ShieldAlert size={20} /> <span className="text-[10px] font-bold mt-1">AMARELO</span>
-                  </button>
-                  <button onClick={() => handleConsoleAction(MatchEventType.RED_CARD)} className={`${actionBtnBase} bg-red-600 hover:bg-red-500 text-white`}>
-                    <ShieldAlert size={20} /> <span className="text-[10px] font-bold mt-1">VERMELHO</span>
-                  </button>
-                  <button onClick={() => handleConsoleAction(MatchEventType.FOUL)} className={`${actionBtnBase} bg-slate-700 hover:bg-slate-600 text-white`}>
-                    <X size={20} /> <span className="text-[10px] font-bold mt-1">FALTA</span>
-                  </button>
-                  <button onClick={() => handleConsoleAction(MatchEventType.CORNER)} className={`${actionBtnBase} bg-blue-600 hover:bg-blue-500 text-white`}>
-                    <CornerUpRight size={20} /> <span className="text-[10px] font-bold mt-1">ESCANT.</span>
-                  </button>
-                  <button onClick={() => handleConsoleAction(MatchEventType.OFFSIDE)} className={`${actionBtnBase} bg-slate-600 hover:bg-slate-500 text-white`}>
-                    <Flag size={20} /> <span className="text-[10px] font-bold mt-1">IMPED.</span>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="max-w-xl mx-auto text-white">
-                <div className="flex justify-between items-center mb-4">
-                  <h4 className="font-bold text-lg flex items-center gap-2">
-                    {selectedEventType === MatchEventType.GOAL && <Goal className="text-emerald-500" />}
-                    {selectedEventType === MatchEventType.YELLOW_CARD && <ShieldAlert className="text-yellow-500" />}
-                    {selectedEventType === MatchEventType.RED_CARD && <ShieldAlert className="text-red-500" />}
-                    Registrar {selectedEventType}
-                  </h4>
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <Timer size={16} className="text-slate-400" />
-                      <input
-                        type="number"
-                        value={eventMinute}
-                        onChange={(e) => setEventMinute(parseInt(e.target.value))}
-                        className="w-16 bg-slate-800 border border-slate-600 rounded p-1 text-center font-mono"
-                      />
-                      <span className="text-sm text-slate-400">min</span>
-                    </div>
-                    <button onClick={() => setConsoleOpen(false)} className="bg-slate-800 p-1 rounded-full hover:bg-slate-700"><X size={20} /></button>
-                  </div>
-                </div>
-
-                {!selectedTeamId ? (
-                  <div className="grid grid-cols-2 gap-4">
-                    <button onClick={() => setSelectedTeamId(homeTeam.id)} className="bg-slate-800 p-6 rounded-xl hover:bg-slate-700 border border-slate-600 flex flex-col items-center gap-2 transition">
-                      <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-slate-900" style={{ backgroundColor: homeTeam.logoColor }}>{homeTeam.shortName}</div>
-                      <span className="font-bold">{homeTeam.name}</span>
-                    </button>
-                    <button onClick={() => setSelectedTeamId(awayTeam.id)} className="bg-slate-800 p-6 rounded-xl hover:bg-slate-700 border border-slate-600 flex flex-col items-center gap-2 transition">
-                      <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-slate-900" style={{ backgroundColor: awayTeam.logoColor }}>{awayTeam.shortName}</div>
-                      <span className="font-bold">{awayTeam.name}</span>
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <button onClick={() => setSelectedTeamId(null)} className="text-xs text-slate-400 hover:text-white underline">Voltar para seleção de time</button>
-                    {selectedEventType !== MatchEventType.CORNER ? (
-                      <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto">
-                        {(selectedTeamId === homeTeam.id ? homeTeam : awayTeam).roster.map(player => (
-                          <button
-                            key={player.id}
-                            onClick={() => submitEvent(player.id)}
-                            className="bg-slate-800 hover:bg-emerald-600 p-2 rounded border border-slate-700 flex flex-col items-center gap-1 transition"
-                          >
-                            <span className="font-bold text-lg">{player.number}</span>
-                            <span className="text-[10px] truncate w-full text-center">{player.name.split(' ')[0]}</span>
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-4">
-                        <p className="mb-4 text-slate-400 text-sm">Escanteios não são atribuídos a jogadores específicos.</p>
-                        <button
-                          onClick={() => submitEvent(null)}
-                          className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2 rounded-lg font-bold"
-                        >
-                          Confirmar Escanteio
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <button onClick={handleGameFlowAction} className={`flex items-center gap-2 px-6 py-3 rounded-full font-bold shadow-lg transition transform hover:scale-105 ${style}`}>
+        <Icon size={20} fill="currentColor" /> {label}
+      </button>
     );
   };
 
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-50 flex flex-col animate-in slide-in-from-bottom duration-300">
-      <div className="bg-slate-900 text-white p-4 shadow-md flex-shrink-0">
-        <div className="max-w-3xl mx-auto">
-          <div className="flex justify-between items-start mb-4">
-            <button onClick={onClose} className="text-slate-400 hover:text-white flex items-center gap-2 transition text-sm font-bold">
-              <X size={18} /> Fechar
-            </button>
-
-            <button
-              onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)}
-              className="text-slate-400 hover:text-white flex items-center gap-1 transition text-xs font-bold bg-slate-800 px-3 py-1 rounded-full"
-            >
-              {isHeaderCollapsed ? (
-                <> <ChevronDown size={14} /> Expandir Placar </>
-              ) : (
-                <> <ChevronUp size={14} /> Compactar </>
-              )}
-            </button>
+  const renderLiveConsole = () => {
+    if (!isConsoleMinimized) {
+      return (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-5px_20px_rgba(0,0,0,0.1)] z-40 animate-in slide-in-from-bottom p-4">
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="font-bold text-slate-800">Console de Jogo</h4>
+            <button onClick={() => setIsConsoleMinimized(true)} className="p-2 text-slate-400 hover:text-slate-600"><ChevronDown /></button>
           </div>
 
-          {!isHeaderCollapsed ? (
-            <div className="flex justify-between items-center mb-6 animate-in slide-in-from-top-2 duration-300">
-              <div className="flex flex-col items-center w-1/3">
-                <div className="w-16 h-16 rounded-full flex items-center justify-center font-bold text-2xl shadow-lg border-2 border-slate-700 mb-2 overflow-hidden" style={{ backgroundColor: homeTeam.logoColor }}>
-                  {homeTeam.profilePicture ? (
-                    <img src={homeTeam.profilePicture} alt={homeTeam.shortName.toUpperCase()} className="w-full h-full object-cover" />
-                  ) : homeTeam.shortName.toUpperCase()}
-                </div>
-                <h3 className="font-bold text-center leading-tight text-lg">{homeTeam.name}</h3>
-              </div>
-
-              <div className="flex flex-col items-center w-1/3">
-                <div className="text-5xl font-bold font-mono tracking-widest mb-1 flex gap-2">
-                  <span>{match.homeScore}</span>
-                  <span className="text-slate-600">:</span>
-                  <span>{match.awayScore}</span>
-                </div>
-                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${match.status === MatchStatus.LIVE ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-700 text-slate-300'}`}>
-                  {match.status === MatchStatus.LIVE ? 'Ao Vivo' : match.status === MatchStatus.FINISHED ? 'Fim de Jogo' : 'Agendado'}
-                </span>
-                <span className="text-slate-400 text-xs mt-2 flex items-center gap-1"><MapPin size={10} /> {arena ? arena.name : match.arenaId}</span>
-              </div>
-
-              <div className="flex flex-col items-center w-1/3">
-                <div className="w-16 h-16 rounded-full flex items-center justify-center font-bold text-2xl shadow-lg border-2 border-slate-700 mb-2 overflow-hidden" style={{ backgroundColor: awayTeam.logoColor }}>
-                  {awayTeam.profilePicture ? (
-                    <img src={awayTeam.profilePicture} alt={awayTeam.shortName.toUpperCase()} className="w-full h-full object-cover" />
-                  ) : awayTeam.shortName.toUpperCase()}
-                </div>
-                <h3 className="font-bold text-center leading-tight text-lg">{awayTeam.name}</h3>
-              </div>
+          {/* QUICK ACTIONS */}
+          {match.status === MatchStatus.LIVE && isTimerRunning && (
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              {[MatchEventType.GOAL, MatchEventType.FOUL, MatchEventType.YELLOW_CARD, MatchEventType.RED_CARD].map(type => (
+                <button key={type} onClick={() => handleConsoleAction(type)} className="p-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition whitespace-nowrap overflow-hidden text-ellipsis border border-transparent hover:border-slate-300">
+                  {type === MatchEventType.GOAL ? 'GOL' : type === MatchEventType.YELLOW_CARD ? 'AMARELO' : type === MatchEventType.RED_CARD ? 'VERMELHO' : 'FALTA'}
+                </button>
+              ))}
             </div>
-          ) : (
-            <div className="flex justify-between items-center mb-4 px-4 py-2 bg-slate-800 rounded-xl animate-in fade-in duration-300">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border border-slate-600 overflow-hidden" style={{ backgroundColor: homeTeam.logoColor }}>
-                  {homeTeam.profilePicture ? (
-                    <img src={homeTeam.profilePicture} alt={homeTeam.shortName.toUpperCase()} className="w-full h-full object-cover" />
-                  ) : homeTeam.shortName.toUpperCase()}
-                </div>
-                <span className="font-bold text-xl">{match.homeScore}</span>
-              </div>
+          )}
 
-              <div className="flex flex-col items-center">
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${match.status === MatchStatus.LIVE ? 'bg-red-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
-                  {match.status === MatchStatus.LIVE ? 'Ao Vivo' : 'Fim'}
-                </span>
-                <span className="text-[10px] text-slate-400 font-mono mt-0.5">{eventMinute > 0 ? `${eventMinute}'` : ''}</span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className="font-bold text-xl">{match.awayScore}</span>
-                <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs border border-slate-600 overflow-hidden" style={{ backgroundColor: awayTeam.logoColor }}>
-                  {awayTeam.profilePicture ? (
-                    <img src={awayTeam.profilePicture} alt={awayTeam.shortName.toUpperCase()} className="w-full h-full object-cover" />
-                  ) : awayTeam.shortName.toUpperCase()}
-                </div>
+          {/* EVENT MODAL */}
+          {consoleOpen && selectedEventType && (
+            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 mb-4 animate-in fade-in zoom-in-95">
+              <p className="text-sm font-bold mb-2 text-slate-600">Para qual time?</p>
+              <div className="flex gap-2">
+                <button onClick={() => { setSelectedTeamId(homeTeam.id); handleSubmitEvent() }} className="flex-1 p-3 bg-white border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-slate-800 font-bold rounded-lg shadow-sm">{homeTeam.name}</button>
+                <button onClick={() => { setSelectedTeamId(awayTeam.id); handleSubmitEvent() }} className="flex-1 p-3 bg-white border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50 text-slate-800 font-bold rounded-lg shadow-sm">{awayTeam.name}</button>
               </div>
             </div>
           )}
 
-          <div className="flex border-b border-slate-700 overflow-x-auto">
-            <button onClick={() => setActiveTab('TIMELINE')} className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === 'TIMELINE' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>Timeline</button>
-            <button onClick={() => setActiveTab('TRANSMISSION')} className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 transition flex items-center justify-center gap-1 whitespace-nowrap ${activeTab === 'TRANSMISSION' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
-              <Video size={14} /> Transmissão
-            </button>
-            <button onClick={() => setActiveTab('LINEUPS')} className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === 'LINEUPS' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>Escalações</button>
-            <button onClick={() => setActiveTab('MEDIA')} className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 transition flex items-center justify-center gap-1 whitespace-nowrap ${activeTab === 'MEDIA' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
-              <ImageIcon size={14} /> Mídia
-            </button>
-            <button onClick={() => setActiveTab('LOCATION')} className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 transition flex items-center justify-center gap-1 whitespace-nowrap ${activeTab === 'LOCATION' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
-              <MapPin size={14} /> Local
-            </button>
-            <button onClick={() => setActiveTab('STATS')} className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 transition whitespace-nowrap ${activeTab === 'STATS' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>Stats</button>
-            <button onClick={() => setActiveTab('CHAT')} className={`flex-1 py-3 px-4 text-sm font-medium border-b-2 transition flex justify-center items-center gap-1 whitespace-nowrap ${activeTab === 'CHAT' ? 'border-emerald-500 text-white' : 'border-transparent text-slate-400 hover:text-slate-200'}`}>
-              Chat {isMatchLive && <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>}
-            </button>
+          {/* TIMER & FLOW CONTROLS */}
+          <div className="flex justify-between items-center pt-4 border-t border-slate-100">
+            <div className="flex items-center gap-4">
+              <div className="text-3xl font-mono font-black text-slate-800 w-28">{formatTime(gameTimer)}</div>
+              <div className="flex flex-col">
+                <span className="text-xs font-bold text-slate-500 uppercase">Tempo</span>
+                <span className="text-sm font-bold text-emerald-600">{matchPeriod}º</span>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              {renderGameFlowButton()}
+            </div>
+          </div>
+        </div>
+      )
+    } else {
+      return (
+        <div className="fixed bottom-4 right-4 z-40">
+          <button onClick={() => setIsConsoleMinimized(false)} className="bg-slate-900 text-white px-4 py-3 rounded-full shadow-xl flex items-center gap-2 font-bold animate-bounce cursor-pointer hover:bg-slate-800">
+            <Activity size={20} /> <span className="text-sm">{formatTime(gameTimer)}</span>
+          </button>
+        </div>
+      )
+    }
+  };
+
+  // Stat Calculations for Stats Tab
+  const getTeamStats = (teamId: string) => {
+    const teamEvents = match.events.filter(e => e.teamId === teamId);
+    return {
+      goals: teamEvents.filter(e => e.type === MatchEventType.GOAL).length,
+      yellowCards: teamEvents.filter(e => e.type === MatchEventType.YELLOW_CARD).length,
+      redCards: teamEvents.filter(e => e.type === MatchEventType.RED_CARD).length,
+      fouls: teamEvents.filter(e => e.type === MatchEventType.FOUL).length,
+      corners: teamEvents.filter(e => e.type === MatchEventType.CORNER).length,
+    }
+  };
+
+  const homeStats = getTeamStats(homeTeam.id);
+  const awayStats = getTeamStats(awayTeam.id);
+
+  // NEW LINEUPS STATE
+  const [viewingLineupTeamId, setViewingLineupTeamId] = useState(homeTeam.id);
+  const [homeTeamTactics, setHomeTeamTactics] = useState<TacticalPosition[]>(match.homeTactics || homeTeam.tacticalFormation);
+  const [awayTeamTactics, setAwayTeamTactics] = useState<TacticalPosition[]>(match.awayTactics || awayTeam.tacticalFormation);
+
+  // Update tactics state if match prop updates (e.g. real-time sync)
+  useEffect(() => {
+    if (match.homeTactics) setHomeTeamTactics(match.homeTactics);
+    if (match.awayTactics) setAwayTeamTactics(match.awayTactics);
+  }, [match.homeTactics, match.awayTactics]);
+
+  const handleTogglePlayer = (player: Player) => {
+    const isHome = viewingLineupTeamId === homeTeam.id;
+    const currentList = isHome ? homeTeamTactics : awayTeamTactics;
+    const setList = isHome ? setHomeTeamTactics : setAwayTeamTactics;
+
+    const exists = currentList.some(p => p.playerId === player.id);
+    if (exists) {
+      setList(currentList.filter(p => p.playerId !== player.id));
+    } else {
+      setList([...currentList, { playerId: player.id, x: 50, y: 50 }]);
+    }
+  };
+
+  const handleSaveLineup = () => {
+    const isHome = viewingLineupTeamId === homeTeam.id;
+    const tactics = isHome ? homeTeamTactics : awayTeamTactics;
+    onSaveMatchTactics(match.id, viewingLineupTeamId, tactics);
+    alert("Escalação salva com sucesso!");
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-white flex flex-col animate-in fade-in duration-200">
+      {/* HEADER */}
+      <div className="bg-slate-900 text-white p-4 pb-12 relative overflow-hidden shrinkage-header">
+        <div className="flex justify-between items-start relative z-10 mb-4">
+          <button onClick={onClose} className="flex items-center gap-1 text-slate-400 hover:text-white transition"><X size={20} /> Fechar</button>
+          <div className="flex items-center gap-2">
+            <button onClick={handleGenerateNews} className="flex items-center gap-1 text-xs font-bold bg-gradient-to-r from-purple-500 to-indigo-500 text-white py-1 px-3 rounded-full hover:shadow-lg transition animate-pulse"><Sparkles size={14} /> IA Resenha</button>
+            <button onClick={() => setIsHeaderCollapsed(!isHeaderCollapsed)} className="flex items-center gap-1 text-xs font-bold bg-slate-800 py-1 px-3 rounded-full">{isHeaderCollapsed ? 'Expandir' : 'Compactar'} <div className={isHeaderCollapsed ? "rotate-180" : ""}><ChevronUp size={14} /></div></button>
+          </div>
+        </div>
+        <div className={`flex justify-between items-center transition-all duration-300 ${isHeaderCollapsed ? 'scale-75 origin-top -mt-8 mb-0' : 'mb-4'}`}>
+          <div className="text-center w-1/3">
+            <div className={`mx-auto rounded-full overflow-hidden border-4 border-white/10 shadow-lg mb-2 relative ${isHeaderCollapsed ? 'w-16 h-16' : 'w-20 h-20'}`}>
+              {homeTeam.profilePicture ? <img src={homeTeam.profilePicture} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-800 flex items-center justify-center font-bold text-2xl uppercase">{homeTeam.shortName?.substring(0, 2).toUpperCase() || homeTeam.name.substring(0, 2).toUpperCase()}</div>}
+            </div>
+            <h2 className="font-black text-lg leading-tight truncate">{homeTeam.name}</h2>
+          </div>
+          <div className="text-center flex-1">
+            <div className="text-5xl font-black tracking-tighter flex items-center justify-center gap-4 mb-2 filter drop-shadow-2xl">
+              <span>{match.homeScore}</span>
+              <span className="text-slate-600 text-4xl">:</span>
+              <span>{match.awayScore}</span>
+            </div>
+            <span className={`px-3 py-1 rounded-full text-xs font-bold tracking-wider uppercase ${isMatchLive ? 'bg-red-500 text-white animate-pulse' : 'bg-slate-800 text-slate-400'}`}>
+              {match.status === MatchStatus.SCHEDULED ? 'AGENDADO' : isMatchLive ? 'AO VIVO' : 'ENCERRADO'}
+            </span>
+          </div>
+          <div className="text-center w-1/3">
+            <div className={`mx-auto rounded-full overflow-hidden border-4 border-white/10 shadow-lg mb-2 relative ${isHeaderCollapsed ? 'w-16 h-16' : 'w-20 h-20'}`}>
+              {awayTeam.profilePicture ? <img src={awayTeam.profilePicture} className="w-full h-full object-cover" /> : <div className="w-full h-full bg-slate-800 flex items-center justify-center font-bold text-2xl uppercase">{awayTeam.shortName?.substring(0, 2).toUpperCase() || awayTeam.name.substring(0, 2).toUpperCase()}</div>}
+            </div>
+            <h2 className="font-black text-lg leading-tight truncate">{awayTeam.name}</h2>
           </div>
         </div>
       </div>
 
-      <div className={`flex-1 overflow-y-auto bg-slate-100 p-4 ${canControl ? 'pb-28' : ''}`}>
-        <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm min-h-[400px]">
+      {/* TABS */}
+      <div className="-mt-8 mx-2 bg-white rounded-xl shadow-lg border border-slate-100 flex flex-col flex-1 relative z-20 overflow-hidden">
+        <div className="flex border-b border-slate-100 overflow-x-auto scrollbar-hide">
+          {['TIMELINE', 'TRANSMISSION', 'ESCALAÇÕES', 'MÍDIA', 'LOCAL', 'STATS', 'CHAT'].map((tab) => {
+            const key = tab === 'ESCALAÇÕES' ? 'LINEUPS' : tab === 'MÍDIA' ? 'MEDIA' : tab === 'LOCAL' ? 'LOCATION' : tab;
+            const isActive = activeTab === key;
+            return (
+              <button key={key} onClick={() => setActiveTab(key as any)} className={`px-4 py-3 text-[10px] font-bold tracking-wider uppercase border-b-2 transition whitespace-nowrap flex items-center gap-1 ${isActive ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>
+                {tab === 'TRANSMISSION' && <Video size={12} />}
+                {tab === 'MÍDIA' && <ImageIcon size={12} />}
+                {tab === 'LOCAL' && <MapPin size={12} />}
+                {tab === 'STATS' && <BarChart3 size={12} />}
+                {tab.replace('TRANSMISSION', 'Transmissão').replace('MEDIA', 'Mídia').replace('LOCATION', 'Local').replace('LINEUPS', 'Escalações')}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="flex-1 overflow-y-auto bg-white pb-20">
 
           {/* TIMELINE TAB */}
           {activeTab === 'TIMELINE' && (
-            <div className="p-6">
+            <div className="p-4 relative">
               {match.events.length === 0 ? (
-                <div className="text-center py-10 text-slate-400">A partida ainda não começou ou nenhum evento foi registrado.</div>
+                <div className="text-center py-12 opacity-50 flex flex-col items-center">
+                  <Flag className="mb-2" />
+                  <p>Início de jogo</p>
+                  <p className="text-xs">Eventos na linha do tempo</p>
+                </div>
               ) : (
-                <div className="space-y-6 relative before:absolute before:inset-y-0 before:left-1/2 before:-translate-x-px before:w-0.5 before:bg-slate-200">
-                  {match.events.slice().sort((a, b) => a.minute - b.minute).map(event => {
-                    const config = getEventConfig(event.type);
-                    const EventIcon = config.icon;
-                    const isCenter = event.type === MatchEventType.START || event.type === MatchEventType.END;
-                    const isAway = event.teamId === awayTeam.id;
+                <div className="relative">
+                  {/* Central Line */}
+                  <div className="absolute left-1/2 top-0 bottom-0 w-0.5 bg-slate-200 -translate-x-1/2 rounded-full"></div>
 
-                    if (isCenter) {
+                  {(() => {
+                    // Pre-process events to determine Period (1T/2T)
+                    let currentPeriod = 0;
+                    const chronEvents = [...match.events].map(e => {
+                      if (e.type === MatchEventType.START) currentPeriod++;
+                      return { ...e, period: currentPeriod || 1 };
+                    });
+
+                    // Render in Reverse (Newest Top)
+                    return chronEvents.reverse().map((event, index) => {
+                      const isHome = event.teamId === homeTeam.id;
+                      const isAway = event.teamId === awayTeam.id;
+                      const isCenter = !isHome && !isAway;
+
+                      const cfg = getEventIcon(event.type);
+                      const Icon = cfg.icon;
+
+                      // Translate
+                      let label = event.type as string;
+                      if (event.type === MatchEventType.GOAL) label = 'GOL';
+                      else if (event.type === MatchEventType.YELLOW_CARD) label = 'AMARELO';
+                      else if (event.type === MatchEventType.RED_CARD) label = 'VERMELHO';
+                      else if (event.type === MatchEventType.FOUL) label = 'FALTA';
+                      else if (event.type === MatchEventType.START) label = 'INÍCIO';
+                      else if (event.type === MatchEventType.END) label = 'FIM';
+
                       return (
-                        <div key={event.id} className="flex items-center justify-center relative z-10 py-4">
-                          <div className="bg-slate-100 text-slate-600 text-xs font-bold px-4 py-1.5 rounded-full border border-slate-200 flex items-center gap-2 ring-4 ring-white">
-                            <EventIcon size={12} />
-                            {event.description || config.label}
+                        <div key={event.id} className="relative flex items-center justify-between mb-6 animate-in slide-in-from-bottom-2">
+
+                          {/* LEFT SIDE (Home) */}
+                          <div className="flex-1 pr-8 flex justify-end">
+                            {isHome && (
+                              <div className="text-right">
+                                <div className="flex items-center justify-end gap-2 mb-1">
+                                  <span className="font-black text-sm text-slate-800 uppercase tracking-widest">{label}</span>
+                                  <div className={`p-1.5 rounded-full ${cfg.bg} ${cfg.color} shadow-sm`}><Icon size={14} /></div>
+                                </div>
+                                <div className="text-xs text-slate-600 font-bold">{event.playerName || homeTeam.shortName}</div>
+                              </div>
+                            )}
                           </div>
+
+                          {/* CENTER AXIS (Time & Period) */}
+                          <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center z-10">
+                            <div className="bg-slate-900 text-white text-[10px] font-black px-2 py-1 rounded-full shadow-lg border-2 border-white w-10 text-center">
+                              {event.minute}'
+                            </div>
+                            <div className="text-[8px] font-bold text-slate-400 mt-0.5 bg-white px-1 rounded">
+                              {event.period}T
+                            </div>
+                          </div>
+
+                          {/* RIGHT SIDE (Away) */}
+                          <div className="flex-1 pl-8 flex justify-start">
+                            {isAway && (
+                              <div className="text-left">
+                                <div className="flex items-center justify-start gap-2 mb-1">
+                                  <div className={`p-1.5 rounded-full ${cfg.bg} ${cfg.color} shadow-sm`}><Icon size={14} /></div>
+                                  <span className="font-black text-sm text-slate-800 uppercase tracking-widest">{label}</span>
+                                </div>
+                                <div className="text-xs text-slate-600 font-bold">{event.playerName || awayTeam.shortName}</div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* CENTER EVENT (Start/End) */}
+                          {isCenter && (
+                            <div className="absolute left-1/2 -translate-x-1/2 top-8 bg-slate-100 px-3 py-1 rounded-full border border-slate-200 shadow-sm z-20 whitespace-nowrap">
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                <Icon size={12} /> {label} do {event.period}º Tempo
+                              </span>
+                            </div>
+                          )}
+
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TRANSMISSION TAB */}
+          {activeTab === 'TRANSMISSION' && (
+            <div className="p-4">
+
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-slate-700">Fontes de Vídeo</h3>
+                <button onClick={() => window.location.reload()} className="flex items-center gap-1 text-xs text-slate-500 hover:text-emerald-600">
+                  <RefreshCw size={12} /> Atualizar
+                </button>
+              </div>
+
+              {match.streams && match.streams.length > 0 ? (
+                <>
+                  <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+                    {match.streams.map((s, i) => (
+                      <button key={s.id} onClick={() => setActiveStreamIndex(i)} className={`px-4 py-2 rounded-full border text-xs font-bold whitespace-nowrap ${activeStreamIndex === i ? 'bg-emerald-100 border-emerald-500 text-emerald-700' : 'bg-white border-slate-200'}`}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                  {(() => {
+                    const activeStream = match.streams![activeStreamIndex];
+                    if (activeStream) {
+                      return (
+                        <div className="aspect-video bg-black rounded-xl overflow-hidden shadow-lg relative">
+                          {activeStream.provider === 'YOUTUBE' && <iframe width="100%" height="100%" src={`https://www.youtube.com/embed/${activeStream.identifier}`} frameBorder="0" allowFullScreen />}
+                          {activeStream.provider === 'TWITCH' && <iframe width="100%" height="100%" src={`https://player.twitch.tv/?channel=${activeStream.identifier}&parent=${window.location.hostname}`} frameBorder="0" allowFullScreen />}
+                          {activeStream.provider === 'AGORA' && (
+                            <div className="flex items-center justify-center h-full text-white">Transmissão Nativa Desativada</div>
+                          )}
                         </div>
                       )
                     }
-
-                    return (
-                      <div key={event.id} className={`flex items-center gap-4 ${isAway ? 'flex-row-reverse text-right' : ''}`}>
-                        <div className={`flex-1 ${isAway ? 'pr-8 flex justify-end' : 'pl-8 flex justify-start'}`}>
-                          <div className={`bg-white p-3 rounded-lg border border-slate-100 shadow-sm max-w-[220px] ${isAway ? 'text-right' : 'text-left'}`}>
-                            <div className={`flex items-center gap-2 mb-1 ${isAway ? 'flex-row-reverse' : ''}`}>
-                              <div className={`p-1.5 rounded-full ${config.bg} ${config.color}`}>
-                                <EventIcon size={14} />
-                              </div>
-                              <span className={`text-xs font-bold uppercase ${config.color}`}>{config.label}</span>
-                            </div>
-                            <div className="text-sm font-medium text-slate-700">{event.playerName || event.description}</div>
-                          </div>
-                        </div>
-                        <div className="relative z-10 w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold ring-4 ring-white border-2 border-slate-200 shadow-sm">
-                          {event.minute}'
-                        </div>
-                        <div className="flex-1"></div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TRANSMISSION (YOUTUBE) TAB */}
-          {activeTab === 'TRANSMISSION' && (
-            <div className="p-4">
-              {match.youtubeVideoId ? (
-                <div className="aspect-video w-full rounded-xl overflow-hidden bg-black shadow-lg">
-                  <iframe
-                    width="100%"
-                    height="100%"
-                    src={`https://www.youtube.com/embed/${match.youtubeVideoId}?autoplay=1`}
-                    title="YouTube video player"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="w-full h-full"
-                  ></iframe>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-64 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-400">
-                  <Video size={48} className="mb-2 opacity-50" />
-                  <p>Nenhuma transmissão vinculada a este jogo.</p>
-                </div>
-              )}
-              {isMatchLive && (
-                <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-lg flex items-start gap-3">
-                  <div className="w-2 h-2 mt-2 rounded-full bg-red-500 animate-pulse flex-shrink-0"></div>
-                  <div className="text-sm">
-                    <p className="font-bold">Partida Ao Vivo</p>
-                    <p>Acompanhe os lances em tempo real no chat.</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* MEDIA GALLERY TAB */}
-          {activeTab === 'MEDIA' && (
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                  <ImageIcon className="text-emerald-500" size={20} /> Galeria da Partida
-                </h3>
-                <div className="flex gap-2">
-                  <input
-                    type="file"
-                    ref={fileInputRef}
-                    className="hidden"
-                    accept="image/*"
-                    onChange={handleFileChange}
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-500 transition"
-                  >
-                    <ImageIcon size={16} /> Foto
-                  </button>
-                  <button
-                    onClick={handleAddVideoClick}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-slate-700 text-white rounded-lg text-sm font-bold hover:bg-slate-600 transition"
-                  >
-                    <Video size={16} /> Vídeo
-                  </button>
-                </div>
-              </div>
-
-              {match.media.length > 0 ? (
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  {match.media.map((item) => (
-                    <div key={item.id} className="relative group aspect-square rounded-lg overflow-hidden bg-slate-200 border border-slate-300 cursor-pointer">
-                      {item.type === 'IMAGE' ? (
-                        <img src={item.url} alt="Media" className="w-full h-full object-cover transition duration-300 group-hover:scale-105" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-black">
-                          <Video className="text-white opacity-50" size={32} />
-                          <span className="text-xs text-white absolute bottom-2 left-2">Vídeo</span>
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-end p-2">
-                        <p className="text-white text-[10px]">Enviado por {item.uploadedBy}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12 bg-slate-50 rounded-xl border border-dashed border-slate-300">
-                  <ImageIcon size={32} className="text-slate-300 mx-auto mb-2" />
-                  <p className="text-slate-400 text-sm">Nenhuma foto ou vídeo adicionado ainda.</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* LOCATION TAB */}
-          {activeTab === 'LOCATION' && (
-            <div className="p-6 space-y-4">
-              {arena ? (
-                <>
-                  <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                    <MapPin className="text-emerald-500" size={20} />
-                    {arena.name}
-                  </h3>
-                  <p className="text-slate-500 text-sm">{arena.address}</p>
-                  {arena.googleMapsUrl && (
-                    <a href={arena.googleMapsUrl} target="_blank" rel="noreferrer" className="text-emerald-600 text-sm underline hover:text-emerald-500 mb-4 block">
-                      Abrir no Google Maps
-                    </a>
-                  )}
-                  <div className="aspect-video w-full rounded-xl overflow-hidden bg-slate-100 shadow-md border border-slate-200">
-                    <iframe
-                      width="100%"
-                      height="100%"
-                      frameBorder="0"
-                      scrolling="no"
-                      src={`https://maps.google.com/maps?q=${encodeURIComponent(arena.address)}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
-                    ></iframe>
-                  </div>
+                    return null;
+                  })()}
                 </>
               ) : (
-                <div className="text-center py-10 text-slate-400">
-                  <MapPin size={48} className="mx-auto mb-2 opacity-50" />
-                  <p>Arena não informada ou não encontrada.</p>
-                  <p className="text-xs font-mono">{match.arenaId}</p>
+                <div className="h-48 bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl flex flex-col items-center justify-center text-slate-400">
+                  <Video size={32} className="mb-2 opacity-20" />
+                  <p className="text-sm">Nenhuma transmissão ativa</p>
                 </div>
               )}
+
+              <div className="mt-6 border-t pt-4">
+                {canControl && (
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={handleAddStreamClick} className="flex items-center gap-2 px-3 py-2 bg-slate-800 text-white rounded-lg text-xs font-bold hover:bg-slate-700 transition">
+                      <Plus size={14} /> Link Externo
+                    </button>
+                    <button onClick={handleRemoveStreamClick} className="flex items-center gap-2 px-3 py-2 bg-red-100 text-red-700 rounded-lg text-xs font-bold hover:bg-red-200 transition">
+                      <X size={14} /> Remover
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {/* LINEUPS / TACTICS TAB */}
+          {/* LINEUPS TAB */}
           {activeTab === 'LINEUPS' && (
-            <div className="flex flex-col h-full">
-              {/* Team Switcher for Tactics */}
-              <div className="flex bg-slate-100 p-1 rounded-t-xl border-b border-slate-200">
+            <div className="p-4 pb-20">
+              {/* Team Selector Checkbox/Toggle */}
+              <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
                 <button
-                  onClick={() => setViewingTacticsTeamId(homeTeam.id)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-bold rounded-lg transition ${viewingTacticsTeamId === homeTeam.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                  onClick={() => setViewingLineupTeamId(homeTeam.id)}
+                  className={`flex-1 py-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 ${viewingLineupTeamId === homeTeam.id ? 'bg-white shadow-sm text-slate-900 border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
                 >
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: homeTeam.logoColor }}></span>
+                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: homeTeam.logoColor }}></div>
                   {homeTeam.name}
                 </button>
                 <button
-                  onClick={() => setViewingTacticsTeamId(awayTeam.id)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 text-sm font-bold rounded-lg transition ${viewingTacticsTeamId === awayTeam.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                  onClick={() => setViewingLineupTeamId(awayTeam.id)}
+                  className={`flex-1 py-3 rounded-lg text-xs font-bold transition flex items-center justify-center gap-2 ${viewingLineupTeamId === awayTeam.id ? 'bg-white shadow-sm text-slate-900 border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}
                 >
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: awayTeam.logoColor }}></span>
+                  <div className="w-4 h-4 rounded-full" style={{ backgroundColor: awayTeam.logoColor }}></div>
                   {awayTeam.name}
                 </button>
               </div>
 
-              <div className="p-4 bg-slate-50 flex-1">
-                {/* Logic to determine if editable */}
-                {(() => {
-                  const isCoachOfViewingTeam = currentUser.role === UserRole.COACH && currentUser.teamId === viewingTacticsTeamId;
-                  const viewingTeam = viewingTacticsTeamId === homeTeam.id ? homeTeam : awayTeam;
-                  // Use Match Specific Tactics if available, otherwise fallback to team default
-                  const matchSpecificTactics = viewingTacticsTeamId === homeTeam.id ? match.homeTactics : match.awayTactics;
-                  const tacticsToDisplay = matchSpecificTactics || viewingTeam.tacticalFormation;
+              {(() => {
+                const isHome = viewingLineupTeamId === homeTeam.id;
+                const activeTeam = isHome ? homeTeam : awayTeam;
+                const activeTactics = isHome ? homeTeamTactics : awayTeamTactics;
+                const setActiveTactics = isHome ? setHomeTeamTactics : setAwayTeamTactics;
 
-                  // Modify the viewingTeam object temporarily to pass the correct tactics to the board
-                  const teamWithTactics = { ...viewingTeam, tacticalFormation: tacticsToDisplay };
+                const isTeamEditable = (
+                  currentUser.role === UserRole.REFEREE ||
+                  (currentUser.teamId === '9eb92f07-f9cf-493f-8628-7d2f66195e80') ||
+                  ((currentUser.role === UserRole.DIRECTOR || currentUser.role === UserRole.COACH) &&
+                    (String(currentUser.teamId) === String(activeTeam.id) || currentUser.id === activeTeam.createdBy))
+                );
 
-                  return (
-                    <div className="space-y-4">
-                      {isCoachOfViewingTeam ? (
-                        <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg text-xs text-amber-800 flex items-center gap-2">
-                          <AlertTriangle size={16} />
-                          Modo Técnico: Você está editando a tática especificamente para este jogo.
-                        </div>
-                      ) : (
-                        <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg text-xs text-blue-800 flex items-center gap-2">
-                          <Eye size={16} />
-                          Modo Visualização: Tática definida pelo técnico.
+                return (
+                  <div key={activeTeam.id} className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    {/* Tactics Board */}
+                    <div className="mb-6 mx-auto max-w-sm">
+                      <TacticsBoard
+                        team={activeTeam}
+                        isEditable={isTeamEditable}
+                        positions={activeTactics}
+                        onPositionsChange={setActiveTactics}
+                        onSave={(newPos) => {
+                          setActiveTactics(newPos);
+                          onSaveMatchTactics(match.id, activeTeam.id, newPos);
+                        }}
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center mb-2">
+                        <h4 className="font-bold text-xs text-slate-400 uppercase tracking-wider">Jogadores Relacionados</h4>
+                        {isTeamEditable && (
+                          <button onClick={handleSaveLineup} className="text-xs font-bold bg-emerald-600 text-white px-3 py-1 rounded-full hover:bg-emerald-500 shadow-sm flex items-center gap-1">
+                            <Save size={12} /> Salvar Escalação
+                          </button>
+                        )}
+                      </div>
+
+                      {(activeTeam.roster && activeTeam.roster.length > 0) ? activeTeam.roster.map(player => {
+                        const isOnField = activeTactics.some(p => p.playerId === player.id);
+                        return (
+                          <div
+                            key={player.id}
+                            className={`flex items-center gap-3 p-3 rounded-xl border transition group ${isOnField ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-slate-100 opacity-70 hover:opacity-100'}`}
+                          >
+                            <span className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm transition ${isOnField ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                              {player.number}
+                            </span>
+                            <div className='flex flex-col flex-1'>
+                              <span className={`font-bold ${isOnField ? 'text-emerald-900' : 'text-slate-600'}`}>{player.name}</span>
+                              <span className="text-[10px] text-slate-400 uppercase font-bold">{player.position}</span>
+                            </div>
+
+                            {isTeamEditable && (
+                              <button
+                                onClick={() => handleTogglePlayer(player)}
+                                className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide transition ${isOnField ? 'bg-red-100 text-red-600 hover:bg-red-200' : 'bg-emerald-100 text-emerald-600 hover:bg-emerald-200'}`}
+                              >
+                                {isOnField ? 'Banco' : 'Titular'}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      }) : (
+                        <div className="text-center py-8">
+                          <Users className="mx-auto mb-2 text-slate-300" size={24} />
+                          <p className="text-xs text-slate-400">Sem jogadores</p>
                         </div>
                       )}
-
-                      <TacticsBoard
-                        team={teamWithTactics}
-                        isEditable={isCoachOfViewingTeam}
-                        onSave={(newPos) => onSaveMatchTactics(match.id, viewingTeam.id, newPos)}
-                        onPlayerClick={(player) => onViewPlayer(player, viewingTeam.name)}
-                      />
-
-                      {/* Basic List View Fallback/Addition */}
-                      <div className="mt-6 bg-white rounded-lg border border-slate-200 p-4">
-                        <h5 className="font-bold text-slate-700 mb-3 text-sm uppercase tracking-wide">Lista de Jogadores</h5>
-                        <div className="grid grid-cols-2 gap-2">
-                          {viewingTeam.roster.map(p => (
-                            <div key={p.id} onClick={() => onViewPlayer(p, viewingTeam.name)} className="flex items-center gap-2 p-1.5 hover:bg-slate-50 rounded cursor-pointer border border-transparent hover:border-slate-100 transition">
-                              <span className="font-mono font-bold w-5 text-slate-400 text-right text-xs">{p.number}</span>
-                              <div className="text-xs font-medium text-slate-900 truncate">{p.name}</div>
-                              {p.stats.goals > 0 && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1 rounded">⚽ {p.stats.goals}</span>}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
                     </div>
-                  );
-                })()}
-              </div>
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+
+          {/* MEDIA TAB */}
+          {activeTab === 'MEDIA' && (
+            <div className="p-4">
+              {match.media && match.media.length > 0 ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {match.media.map(item => (
+                    <div key={item.id} className="relative aspect-square rounded-lg overflow-hidden bg-slate-100 border border-slate-200">
+                      {item.type === 'IMAGE' ? (
+                        <img src={item.url} alt="Media" className="w-full h-full object-cover" />
+                      ) : (
+                        <video src={item.url} className="w-full h-full object-cover" controls />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-400">
+                  <ImageIcon className="mx-auto mb-2 opacity-50" />
+                  <p>Nenhuma foto ou vídeo.</p>
+                </div>
+              )}
+              {canControl && (
+                <div className="mt-4">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept="image/*,video/*"
+                    onChange={handleFileSelect}
+                  />
+                  <button onClick={() => fileInputRef.current?.click()} className="flex w-full items-center justify-center gap-2 p-3 bg-slate-100 rounded-xl text-slate-600 font-bold hover:bg-slate-200 transition">
+                    <Plus size={16} /> Adicionar Foto/Vídeo
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* LOCAL TAB */}
+          {activeTab === 'LOCATION' && (
+            <div className="p-4">
+              {arena ? (
+                <div className="space-y-4">
+                  {/* Map Embed */}
+                  <div className="rounded-xl overflow-hidden border border-slate-200 shadow-sm h-64 bg-slate-100 relative">
+                    <iframe
+                      width="100%"
+                      height="100%"
+                      src={`https://maps.google.com/maps?q=${encodeURIComponent(arena.address)}&t=&z=15&ie=UTF8&iwloc=&output=embed`}
+                      frameBorder="0"
+                      scrolling="no"
+                      marginHeight={0}
+                      marginWidth={0}
+                      title="Mapa da Arena"
+                    />
+                    <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-sm px-2 py-1 rounded text-[10px] font-bold shadow-sm pointer-events-none text-slate-500">
+                      Google Maps
+                    </div>
+                  </div>
+
+                  <a
+                    href={arena.googleMapsUrl || `https://maps.google.com/?q=${arena.name} ${arena.address}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block bg-slate-50 p-4 rounded-xl border border-slate-100 group hover:border-emerald-500 hover:shadow-md transition"
+                  >
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-bold text-lg mb-2 text-slate-800 group-hover:text-emerald-700 transition">{arena.name}</h3>
+                        <p className="text-sm text-slate-600 mb-0 flex items-start gap-2"><MapPin size={16} className="mt-0.5 shrink-0" /> {arena.address}</p>
+                      </div>
+                      <ExternalLink size={16} className="text-slate-400 group-hover:text-emerald-500" />
+                    </div>
+                    <div className="mt-4 text-center text-xs font-bold text-emerald-600">
+                      Abrir no App de Mapas
+                    </div>
+                  </a>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-slate-400">
+                  <MapIcon className="mx-auto mb-2 opacity-50" />
+                  <p>Local não definido.</p>
+                </div>
+              )}
             </div>
           )}
 
           {/* STATS TAB */}
           {activeTab === 'STATS' && (
-            <div className="p-8 space-y-8">
-              {/* Possession Bar */}
-              <div>
-                <div className="flex justify-between text-sm font-bold text-slate-500 mb-1">
-                  <span>{homePossession}%</span>
-                  <span>Posse de Bola (Est.)</span>
-                  <span>{awayPossession}%</span>
-                </div>
-                <div className="flex h-3 rounded-full overflow-hidden bg-slate-100 shadow-inner">
-                  <div className="bg-slate-800 transition-all duration-1000" style={{ width: `${homePossession}%` }}></div>
-                  <div className="bg-slate-300 transition-all duration-1000" style={{ width: `${awayPossession}%` }}></div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {[
-                  { label: 'Gols', h: homeStats.goals, a: awayStats.goals, icon: Goal },
-                  { label: 'Escanteios', h: homeStats.corners, a: awayStats.corners, icon: CornerUpRight },
-                  { label: 'Cartões Amarelos', h: homeStats.yellowCards, a: awayStats.yellowCards, icon: ShieldAlert },
-                  { label: 'Cartões Vermelhos', h: homeStats.redCards, a: awayStats.redCards, icon: ShieldAlert },
-                  { label: 'Faltas', h: homeStats.fouls, a: awayStats.fouls, icon: AlertTriangle },
-                  { label: 'Impedimentos', h: homeStats.offsides, a: awayStats.offsides, icon: Flag },
-                ].map((stat, i) => (
-                  <div key={i}>
-                    <div className="flex justify-between text-sm font-bold text-slate-500 mb-1">
-                      <span>{stat.h}</span>
-                      <span className="flex items-center gap-1"><stat.icon size={14} /> {stat.label}</span>
-                      <span>{stat.a}</span>
+            <div className="p-4">
+              <div className="space-y-6">
+                {/* Goals */}
+                <div>
+                  <div className="flex justify-between items-center mb-1 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <span className="w-10 text-left">{homeTeam.shortName?.substring(0, 3)}</span>
+                    <span>Gols</span>
+                    <span className="w-10 text-right">{awayTeam.shortName?.substring(0, 3)}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-black text-xl w-8 text-center text-slate-800">{homeStats.goals}</span>
+                    <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden flex">
+                      <div style={{ width: `${match.homeScore + match.awayScore > 0 ? (match.homeScore / (match.homeScore + match.awayScore)) * 100 : 50}%` }} className="bg-emerald-500 h-full" />
                     </div>
-                    <div className="flex h-2 rounded-full overflow-hidden bg-slate-100">
-                      <div className="bg-slate-800 transition-all duration-500" style={{ width: `${(stat.h / (stat.h + stat.a || 1)) * 100}%` }}></div>
-                      <div className="bg-slate-300 transition-all duration-500" style={{ width: `${(stat.a / (stat.h + stat.a || 1)) * 100}%` }}></div>
+                    <span className="font-black text-xl w-8 text-center text-slate-800">{match.awayScore}</span>
+                  </div>
+                </div>
+
+                {/* Fouls */}
+                <div>
+                  <div className="flex justify-between items-center mb-1 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                    <span className="w-10 text-left">{homeStats.fouls}</span>
+                    <span>Faltas</span>
+                    <span className="w-10 text-right">{awayStats.fouls}</span>
+                  </div>
+                  <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden flex">
+                    <div style={{ width: `${homeStats.fouls + awayStats.fouls > 0 ? (homeStats.fouls / (homeStats.fouls + awayStats.fouls)) * 100 : 50}%` }} className="bg-amber-400 h-full" />
+                  </div>
+                </div>
+
+                {/* Cards */}
+                <div className="grid grid-cols-2 gap-8 pt-4 border-t border-slate-100">
+                  <div className="text-center">
+                    <div className="text-xs font-bold text-slate-400 mb-2 truncate">{homeTeam.name} - Cartões</div>
+                    <div className="flex justify-center gap-4">
+                      <div className="flex flex-col items-center">
+                        <div className="w-4 h-6 bg-yellow-400 rounded-sm mb-1 shadow-sm" />
+                        <span className="font-bold text-slate-800">{homeStats.yellowCards}</span>
+                      </div>
+                      <div className="flex flex-col items-center">
+                        <div className="w-4 h-6 bg-red-500 rounded-sm mb-1 shadow-sm" />
+                        <span className="font-bold text-slate-800">{homeStats.redCards}</span>
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
-
-              <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-100 text-center">
-                <h4 className="text-emerald-800 font-bold mb-2">Previsão da IA</h4>
-                <p className="text-sm text-emerald-600">Com base no momento atual, o {match.homeScore > match.awayScore ? homeTeam.name : awayTeam.name} tem 75% de chance de manter a vantagem.</p>
+                  <div className="text-center">
+                    <div className="text-xs font-bold text-slate-400 mb-2 truncate">{awayTeam.name} - Cartões</div>
+                    <div className="flex justify-center gap-4">
+                      <div className="flex flex-col items-center">
+                        <div className="w-4 h-6 bg-yellow-400 rounded-sm mb-1 shadow-sm" />
+                        <span className="font-bold text-slate-800">{awayStats.yellowCards}</span>
+                      </div>
+                      <div className="flex flex-col items-center">
+                        <div className="w-4 h-6 bg-red-500 rounded-sm mb-1 shadow-sm" />
+                        <span className="font-bold text-slate-800">{awayStats.redCards}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
 
           {/* CHAT TAB */}
           {activeTab === 'CHAT' && (
-            <div className="flex flex-col h-[500px]">
+            <div className="p-4 flex flex-col h-full">
+              <div className="flex-1 space-y-4 mb-4">
+                {match.chatMessages?.map((msg, i) => (
+                  <div key={i} className={`flex gap-3 ${msg.userId === currentUser.id ? 'flex-row-reverse' : ''}`}>
+                    <div className={`p-3 rounded-2xl text-sm max-w-[80%] ${msg.userId === currentUser.id ? 'bg-emerald-500 text-white rounded-tr-none' : 'bg-slate-100 text-slate-800 rounded-tl-none'}`}>
+                      <p className="font-bold text-xs opacity-70 mb-1">{msg.userName}</p>
+                      {msg.text}
+                    </div>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
               {canChat ? (
-                <>
-                  <div id="chat-container" className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50">
-                    {match.chatMessages.length === 0 && (
-                      <div className="text-center text-slate-400 text-sm mt-10">Nenhuma mensagem ainda. Seja o primeiro a comentar!</div>
-                    )}
-                    {match.chatMessages.map(msg => (
-                      <div key={msg.id} className={`flex flex-col ${msg.userId === 'me' ? 'items-end' : 'items-start'}`}>
-                        <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${msg.userId === 'me'
-                          ? 'bg-emerald-600 text-white rounded-br-none'
-                          : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none shadow-sm'
-                          }`}>
-                          <span className="block text-[10px] font-bold opacity-70 mb-0.5">{msg.userName}</span>
-                          {msg.text}
-                        </div>
-                        <span className="text-[10px] text-slate-400 mt-1 px-1">
-                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                      </div>
-                    ))}
-                    <div ref={chatEndRef}></div>
-                  </div>
-                  <form onSubmit={handleSendChat} className="p-3 bg-white border-t border-slate-200 flex gap-2">
-                    <input
-                      type="text"
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="Digite sua mensagem..."
-                      className="flex-1 border border-slate-300 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-emerald-500"
-                    />
-                    <button type="submit" disabled={!chatInput.trim()} className="bg-emerald-600 text-white p-2 rounded-full hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed">
-                      <Send size={18} />
-                    </button>
-                  </form>
-                </>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-full p-8 text-center text-slate-400">
-                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-                    <Lock size={32} className="text-slate-300" />
-                  </div>
-                  <h4 className="text-lg font-bold text-slate-600 mb-2">Chat Indisponível</h4>
-                  <p className="text-sm max-w-xs">
-                    O chat só está disponível durante partidas <strong>Ao Vivo</strong> e para torcedores registrados dos times em campo.
-                  </p>
-                  {!isMatchLive && <span className="inline-block mt-4 text-xs font-bold bg-slate-200 px-2 py-1 rounded">A partida não está ao vivo</span>}
-                  {isMatchLive && !isFanOfPlayingTeam && currentUser.role === UserRole.FAN && (
-                    <span className="inline-block mt-4 text-xs font-bold bg-yellow-100 text-yellow-700 px-2 py-1 rounded">Você não segue estes times</span>
-                  )}
-                </div>
-              )}
+                <form onSubmit={(e) => { e.preventDefault(); if (chatInput.trim()) { onSendMessage(match.id, chatInput); setChatInput("") } }} className="flex gap-2">
+                  <input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Comente algo..." className="flex-1 bg-slate-100 rounded-full px-4 text-sm" />
+                  <button type="submit" className="p-3 bg-slate-900 text-white rounded-full"><Send size={16} /></button>
+                </form>
+              ) : <p className="text-center text-xs text-slate-400">Chat disponível durante o jogo.</p>}
             </div>
           )}
-
         </div>
       </div>
 
+      {/* CONSOLE OVERLAY */}
       {canControl && renderLiveConsole()}
+
+      {/* AI NEWS MODAL */}
+      {showAIModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95">
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-gradient-to-r from-purple-50 to-indigo-50">
+              <div className="flex items-center gap-2">
+                <div className="bg-purple-100 p-2 rounded-lg text-purple-600">
+                  <Sparkles size={20} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800">LocalLegends AI</h3>
+                  <p className="text-xs text-slate-500 font-medium">Correspondente Virtual</p>
+                </div>
+              </div>
+              <button onClick={() => setShowAIModal(false)}><X size={20} className="text-slate-400 hover:text-slate-600" /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+              {isLoadingAI ? (
+                <div className="flex flex-col items-center justify-center h-48 gap-4">
+                  <div className="animate-spin text-purple-600"><RefreshCw size={32} /></div>
+                  <p className="text-slate-500 font-medium animate-pulse">Escrevendo a matéria...</p>
+                </div>
+              ) : (
+                <div className="prose prose-sm max-w-none text-slate-700">
+                  <div className="whitespace-pre-line leading-relaxed">{aiContent}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-100 flex gap-2 justify-end bg-white">
+              <button
+                onClick={() => { navigator.clipboard.writeText(aiContent); alert("Copiado!"); }}
+                className="flex items-center gap-2 px-4 py-2 text-slate-600 font-bold hover:bg-slate-100 rounded-lg text-sm transition"
+              >
+                <Copy size={16} /> Copiar Texto
+              </button>
+              {onPostNews && (
+                <button
+                  onClick={() => { onPostNews(aiContent, match.id); setShowAIModal(false); }}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white font-bold hover:bg-emerald-500 rounded-lg text-sm transition shadow-lg shadow-emerald-200"
+                >
+                  <Newspaper size={16} /> Postar no App
+                </button>
+              )}
+              <button
+                onClick={() => setShowAIModal(false)}
+                className="px-6 py-2 bg-slate-900 text-white font-bold rounded-lg text-sm hover:bg-slate-800 transition"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
