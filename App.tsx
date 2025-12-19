@@ -87,6 +87,78 @@ const App: React.FC = () => {
   const [editingTeam, setEditingTeam] = useState<Team | null>(null); // New state for editing team
   const [pendingInviteTeamId, setPendingInviteTeamId] = useState<string | null>(null);
 
+  // --- GOOGLE AUTH LISTENER ---
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // Logic for Google Login and Token Refresh
+      if (event === 'SIGNED_IN' && session?.user) {
+        console.log("Supabase Auth Event: SIGNED_IN", session.user.email);
+        setIsLoadingData(true);
+
+        const { email, id } = session.user;
+        const name = session.user.user_metadata.full_name || email?.split('@')[0];
+        const avatar = session.user.user_metadata.avatar_url;
+
+        try {
+          // 1. Check if user exists in public.users
+          // We use 'email' as the reliable link for social login in this hybrid system
+          const { data: existingUser, error } = await supabase.from('users').select('*').eq('email', email).single();
+
+          let appUser: UserAccount;
+
+          if (existingUser) {
+            // User exists, map to App User
+            appUser = { ...existingUser, teamId: existingUser.team_id, role: existingUser.role };
+          } else {
+            // 2. Create New User if not exists
+            console.log("Creating new user for Google Login...");
+            const newUserPayload = {
+              id: id,
+              email: email!,
+              name: name,
+              role: UserRole.FAN, // Default role
+              location: 'Desconhecida',
+              avatar: avatar,
+              team_id: null
+            };
+
+            const { error: insertError } = await supabase.from('users').insert(newUserPayload);
+
+            if (insertError) {
+              console.error("Error creating public user:", insertError);
+              // If error is duplicate key, it implies race condition or id conflict, try to fetch again?
+              // For now, assume success or critical failure.
+            }
+            appUser = { ...newUserPayload, teamId: null } as any;
+          }
+
+          // 3. Update Global State
+          setCurrentUser({
+            id: appUser.id,
+            name: appUser.name,
+            role: appUser.role,
+            teamId: appUser.teamId,
+            email: appUser.email,
+            location: appUser.location,
+            avatar: appUser.avatar
+          });
+
+        } catch (err) {
+          console.error("Auth flow error:", err);
+        } finally {
+          setIsLoadingData(false);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        // Optional: clear state if we were relying on it, but manual logout handles this usually.
+        // setCurrentUser(null);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    }
+  }, []);
+
   // Check URL for Invite Link
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

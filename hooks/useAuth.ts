@@ -55,7 +55,8 @@ export const useAuth = () => {
         onSuccess(startView);
     };
 
-    const handleLogout = (onSuccess: () => void) => {
+    const handleLogout = async (onSuccess: () => void) => {
+        await supabase.auth.signOut(); // Clear Supabase session
         setCurrentUser(null);
         onSuccess();
     };
