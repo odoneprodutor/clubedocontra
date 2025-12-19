@@ -16,10 +16,9 @@ const PlayerDirectory: React.FC<PlayerDirectoryProps> = ({
     const [filterMode, setFilterMode] = useState<'ALL' | 'CITY' | 'FOLLOWING'>('ALL');
     const [searchTerm, setSearchTerm] = useState('');
 
-    // 1. Filter Base: Only Players and Coaches (exclude Fans maybe? or include all?)
-    // Let's include everyone but emphasize Players.
-    // Requirement: "Transfer market" vibe -> Players.
-    const allPlayers = users.filter(u => u.role === UserRole.PLAYER || u.role === UserRole.COACH);
+    // 1. Filter Base: Include Players, Coaches, AND Directors (so they can be found too)
+    // Requirement: "Transfer market" usually focuses on players, but in this social context, users want to see everyone.
+    const allPlayers = users.filter(u => (u.role === UserRole.PLAYER || u.role === UserRole.COACH || u.role === UserRole.DIRECTOR) && u.id !== currentUser.id);
 
     // 2. Apply Filters
     const filteredList = allPlayers.filter(user => {
@@ -33,8 +32,10 @@ const PlayerDirectory: React.FC<PlayerDirectoryProps> = ({
             return socialGraph.some(s => s.followerId === currentUser.id && s.targetId === user.id);
         }
         if (filterMode === 'CITY') {
-            const myCity = currentUser.location || '';
-            return user.location === myCity;
+            const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const myCity = normalize(currentUser.location || '');
+            const userCity = normalize(user.location || '');
+            return userCity !== '' && userCity === myCity;
         }
 
         return true; // ALL

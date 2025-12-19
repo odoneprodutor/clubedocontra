@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserAccount, Team, UserRole } from '../types';
-import { Trophy, AlertTriangle, User, Mail, Key } from 'lucide-react';
+import { Trophy, AlertTriangle, User, Mail, Key, UserPlus } from 'lucide-react';
 import { CitySelect } from './CitySelect';
 import { uploadImage } from '../utils/helpers';
 
@@ -9,9 +9,10 @@ interface LoginScreenProps {
     teams: Team[];
     onLogin: (user: UserAccount) => void;
     onRegister: (newUser: UserAccount) => void;
+    pendingInviteTeamId?: string | null;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin, onRegister }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin, onRegister, pendingInviteTeamId }) => {
     const [isRegistering, setIsRegistering] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -21,6 +22,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin,
     const [selectedTeamId, setSelectedTeamId] = useState<string>('');
     const [avatar, setAvatar] = useState<string>('');
     const [error, setError] = useState<string | null>(null);
+
+    // Auto-select team if invititation is pending
+    useEffect(() => {
+        if (pendingInviteTeamId) {
+            setSelectedTeamId(pendingInviteTeamId);
+            setIsRegistering(true); // Assuming invites usually for new users, but they can toggle back
+        }
+    }, [pendingInviteTeamId]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -117,6 +126,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin,
                         {error && (
                             <div className="mb-6 p-4 bg-red-50/80 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-3 backdrop-blur-sm animate-pulse">
                                 <AlertTriangle size={18} /> {error}
+                            </div>
+                        )}
+
+                        {pendingInviteTeamId && (
+                            <div className="mb-6 p-4 bg-emerald-50/80 border border-emerald-200 text-emerald-800 text-xs rounded-xl flex items-center gap-3 backdrop-blur-sm">
+                                <UserPlus size={18} className="text-emerald-600" />
+                                <div>
+                                    <strong>Convite Especial!</strong>
+                                    <p>Você está sendo convidado para entrar no time <u>{teams.find(t => t.id === pendingInviteTeamId)?.name || '...'}</u>.</p>
+                                </div>
                             </div>
                         )}
 
@@ -222,7 +241,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin,
                                             <select
                                                 value={selectedTeamId}
                                                 onChange={(e) => setSelectedTeamId(e.target.value)}
-                                                className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 transition text-sm cursor-pointer input-focus-effect"
+                                                disabled={!!pendingInviteTeamId} // Lock selection if invited
+                                                className={`w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 transition text-sm cursor-pointer input-focus-effect ${pendingInviteTeamId ? 'bg-emerald-50 border-emerald-200 text-emerald-800 font-bold' : ''}`}
                                             >
                                                 <option value="">Selecione um time...</option>
                                                 {teams.map(t => (

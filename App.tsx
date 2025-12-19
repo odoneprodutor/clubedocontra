@@ -3,7 +3,7 @@ import {
   Users, Trophy as TrophyIcon, Calendar, Shield, Crown, Menu, X, Plus, CheckCircle, MapPin,
   Home, Newspaper, Layout, Map, ArrowLeft, Filter, Save, Trash2, User, Activity,
   MessageCircle, Settings, LogOut, Bell, Heart, UserPlus, Lock, ChevronDown, ChevronUp, ChevronRight, AlertTriangle, Mail, Key,
-  Camera, Briefcase, Target, Grid, List as ListIcon, Play, Video, Image as ImageIcon, Award, Search
+  Camera, Briefcase, Target, Grid, List as ListIcon, Play, Video, Image as ImageIcon, Award, Search, Copy, Link as LinkIcon
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import {
@@ -85,6 +85,63 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState<AppView>('HOME');
   const [isLoading, setIsLoading] = useState(false); // Transition state
   const [editingTeam, setEditingTeam] = useState<Team | null>(null); // New state for editing team
+  const [pendingInviteTeamId, setPendingInviteTeamId] = useState<string | null>(null);
+
+  // Check URL for Invite Link
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const inviteTeamId = params.get('joinTeam');
+    if (inviteTeamId) {
+      setPendingInviteTeamId(inviteTeamId);
+      console.log("Invite Link Detected for Team:", inviteTeamId);
+    }
+  }, []);
+
+  // Handle Auto-Join Team from Invite Link
+  useEffect(() => {
+    if (currentUser && pendingInviteTeamId) {
+      const targetTeam = teams.find(t => t.id === pendingInviteTeamId);
+      if (targetTeam) {
+        if (!currentUser.teamId) {
+          // Join Logic
+          const joinTeam = async () => {
+            const newPlayer: Player = {
+              id: `p-${currentUser.id}`,
+              name: currentUser.name,
+              number: 99,
+              position: 'Curinga',
+              stats: { goals: 0, assists: 0, yellowCards: 0, redCards: 0, matchesPlayed: 0 },
+              userId: currentUser.id
+            };
+            const updatedRoster = [...targetTeam.roster, newPlayer];
+
+            // DB Update
+            await supabase.from('teams').update({ roster: updatedRoster }).eq('id', targetTeam.id);
+            await supabase.from('users').update({ team_id: targetTeam.id, role: UserRole.PLAYER }).eq('id', currentUser.id);
+
+            // Local State Update
+            setTeams(prev => prev.map(t => t.id === targetTeam.id ? { ...t, roster: updatedRoster } : t));
+            setCurrentUser(prev => prev ? { ...prev, teamId: targetTeam.id, role: UserRole.PLAYER } : null); // Update user context
+            setUserAccounts(prev => prev.map(u => u.id === currentUser.id ? { ...u, teamId: targetTeam.id, role: UserRole.PLAYER } : u));
+
+            alert(`Você entrou no time ${targetTeam.name} através do link de convite!`);
+            setPendingInviteTeamId(null); // Clear invite
+
+            // Clean URL
+            window.history.replaceState({}, document.title, window.location.pathname);
+          };
+          joinTeam();
+        } else if (currentUser.teamId === pendingInviteTeamId) {
+          setPendingInviteTeamId(null); // Already in team
+        } else {
+          // Conflict: User in another team
+          // Optional: Prompt to switch? For now, just ignore/alert.
+          setPendingInviteTeamId(null);
+          // alert("Você clicou em um link de convite, mas já está em um time.");
+        }
+      }
+    }
+  }, [currentUser, pendingInviteTeamId, teams]);
 
   // FETCH DATA FROM SUPABASE
   useEffect(() => {
@@ -1817,7 +1874,7 @@ const App: React.FC = () => {
 
   if (!currentUser) {
     if (isLoading) return <PageTransition />;
-    return <LoginScreen users={userAccounts} teams={activeTeams} onLogin={handleLogin} onRegister={handleRegister} />;
+    return <LoginScreen users={userAccounts} teams={activeTeams} onLogin={handleLogin} onRegister={handleRegister} pendingInviteTeamId={pendingInviteTeamId} />;
   }
 
   // Show transition if Loading
@@ -2738,14 +2795,12 @@ const App: React.FC = () => {
                   <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800 dark:text-white">
                     <Users size={20} className="text-blue-500 icon-hover" /> Elenco Completo
                   </h3>
-                  {isEditable && (
-                    <button
-                      onClick={() => setIsViewingFullRoster(true)}
-                      className="text-[10px] px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg font-bold hover:bg-emerald-100 transition btn-feedback shadow-sm"
-                    >
-                      Gerenciar Elenco
-                    </button>
-                  )}
+                  <button
+                    onClick={() => setIsViewingFullRoster(true)}
+                    className="text-[10px] px-3 py-1 bg-emerald-50 text-emerald-600 rounded-lg font-bold hover:bg-emerald-100 transition btn-feedback shadow-sm"
+                  >
+                    {isEditable ? 'Gerenciar Elenco' : 'Ver Elenco Completo'}
+                  </button>
                 </div>
                 {myTeam.roster.length > 0 ? (
                   <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
@@ -4163,9 +4218,35 @@ const App: React.FC = () => {
             <h3 className="font-bold text-xl mb-2 text-slate-800">Convidar Membro</h3>
             <p className="text-sm text-slate-500 mb-6">Para <strong>{getTeam(selectedTeamIdForInvite).name}</strong></p>
             <form onSubmit={handleSendInvite}>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Email do Usuário</label>
-              <input type="email" name="email" defaultValue={inviteModalEmail || ''} className="w-full border border-slate-300 rounded-xl p-3 text-sm mb-6 focus:ring-2 focus:ring-emerald-500 outline-none input-focus-effect" placeholder="exemplo@email.com" required />
-              <button type="submit" className="btn-feedback w-full bg-emerald-600 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200">Enviar Convite</button>
+              <div className="mb-6">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Opção 1: Enviar por Email</label>
+                <input type="email" name="email" defaultValue={inviteModalEmail || ''} className="w-full border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none input-focus-effect" placeholder="exemplo@email.com" />
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Opção 2: Link de Convite</label>
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={`${window.location.origin}?joinTeam=${selectedTeamIdForInvite}`}
+                    className="w-full border border-slate-300 bg-slate-50 rounded-xl p-3 text-xs text-slate-600 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}?joinTeam=${selectedTeamIdForInvite}`);
+                      alert("Link copiado para a área de transferência!");
+                    }}
+                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 p-3 rounded-xl transition btn-feedback"
+                    title="Copiar Link"
+                  >
+                    <Copy size={18} />
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-2 leading-tight">Envie este link no grupo do WhatsApp. Quem clicar entrará direto no time.</p>
+              </div>
+
+              <button type="submit" className="btn-feedback w-full bg-emerald-600 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200">Enviar Convite (Email)</button>
             </form>
           </div>
         </div>

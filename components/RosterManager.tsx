@@ -348,8 +348,9 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
                                 return availableFormations.map(form => (
                                     <button
                                         key={form}
-                                        onClick={() => onApplyFormation(form as any)}
-                                        className="text-[10px] px-3 py-1.5 rounded-lg font-bold text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm transition btn-feedback whitespace-nowrap"
+                                        onClick={() => isEditable && onApplyFormation(form as any)}
+                                        disabled={!isEditable}
+                                        className={`text-[10px] px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap ${isEditable ? 'text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:shadow-sm btn-feedback' : 'text-slate-300 dark:text-slate-600 cursor-default'}`}
                                     >
                                         {form}
                                     </button>
