@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { MapPin, Trophy, Calendar, CheckCircle, Edit, Settings } from 'lucide-react';
-import { Match, Team, MatchStatus, Arena, UserRole } from '../types';
+import { Match, Team, MatchStatus, Arena, UserRole, MatchPrediction } from '../types';
 
 interface MatchCardProps {
   match: Match;
@@ -11,15 +11,23 @@ interface MatchCardProps {
   onUpdateScore: (matchId: string, h: number, a: number, status: MatchStatus) => void;
   onEditDetails: (match: Match) => void;
   onTeamClick?: (teamId: string) => void;
+  onSavePrediction?: (prediction: Omit<MatchPrediction, 'id'>) => void;
+  existingPrediction?: MatchPrediction;
+  currentUserId?: string;
 }
 
 const MatchCard: React.FC<MatchCardProps> = ({
-  match, homeTeam, awayTeam, arena, userRole, onUpdateScore, onEditDetails, onTeamClick
+  match, homeTeam, awayTeam, arena, userRole, onUpdateScore, onEditDetails, onTeamClick,
+  onSavePrediction, existingPrediction, currentUserId
 }) => {
   const [isEditingScore, setIsEditingScore] = useState(false);
   const [tempHomeScore, setTempHomeScore] = useState(match.homeScore || 0);
   const [tempAwayScore, setTempAwayScore] = useState(match.awayScore || 0);
   const [tempStatus, setTempStatus] = useState<MatchStatus>(match.status);
+
+  const [isPredicting, setIsPredicting] = useState(false);
+  const [predHome, setPredHome] = useState(existingPrediction?.predictedHomeScore ?? 0);
+  const [predAway, setPredAway] = useState(existingPrediction?.predictedAwayScore ?? 0);
 
   const date = new Date(match.date);
   const formattedDate = new Intl.DateTimeFormat('pt-BR', {
@@ -29,6 +37,18 @@ const MatchCard: React.FC<MatchCardProps> = ({
   const handleSaveScore = () => {
     onUpdateScore(match.id, tempHomeScore, tempAwayScore, tempStatus);
     setIsEditingScore(false);
+  };
+
+  const handlePredictionSave = () => {
+    if (onSavePrediction && currentUserId) {
+      onSavePrediction({
+        matchId: match.id,
+        userId: currentUserId,
+        predictedHomeScore: predHome,
+        predictedAwayScore: predAway
+      });
+      setIsPredicting(false);
+    }
   };
 
   const handleTeamClickInternal = (e: React.MouseEvent, teamId: string) => {
@@ -163,6 +183,81 @@ const MatchCard: React.FC<MatchCardProps> = ({
             </select>
           </div>
         )}
+
+        {/* Prediction UI (Bolão) - HIDDEN BY USER REQUEST
+        {!isEditingScore && match.status !== MatchStatus.FINISHED && (
+          <div className="mt-6 pt-4 border-t border-slate-100 dark:border-white/5 animate-in fade-in duration-500">
+            {isPredicting ? (
+              <div className="flex flex-col items-center gap-3 bg-emerald-50/50 dark:bg-emerald-900/10 p-4 rounded-2xl border border-emerald-100 dark:border-emerald-900/30">
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Seu Palpite</span>
+                <div className="flex items-center gap-4">
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">{homeTeam.shortName}</span>
+                    <input
+                      type="number"
+                      value={predHome}
+                      onChange={(e) => setPredHome(parseInt(e.target.value) || 0)}
+                      className="w-10 h-10 text-center border-2 border-emerald-200 rounded-lg font-bold text-lg focus:border-emerald-500 outline-none"
+                    />
+                  </div>
+                  <span className="text-slate-300 font-light mt-4">:</span>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">{awayTeam.shortName}</span>
+                    <input
+                      type="number"
+                      value={predAway}
+                      onChange={(e) => setPredAway(parseInt(e.target.value) || 0)}
+                      className="w-10 h-10 text-center border-2 border-emerald-200 rounded-lg font-bold text-lg focus:border-emerald-500 outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 w-full mt-2">
+                  <button onClick={handlePredictionSave} className="flex-1 bg-emerald-600 text-white py-2 rounded-xl text-[10px] font-bold shadow-lg shadow-emerald-200 hover:bg-emerald-500 transition">Confirmar</button>
+                  <button onClick={() => setIsPredicting(false)} className="px-3 py-2 bg-slate-200 text-slate-600 rounded-xl text-[10px] font-bold hover:bg-slate-300 transition">Voltar</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between px-2">
+                <div className="flex items-center gap-2">
+                  <div className="bg-amber-100 dark:bg-amber-900/20 p-1.5 rounded-lg">
+                    <Trophy size={14} className="text-amber-500" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-black text-slate-800 dark:text-slate-200">BOLÃO</div>
+                    {existingPrediction ? (
+                      <div className="text-[11px] font-bold text-emerald-600">Palpite: {existingPrediction.predictedHomeScore} x {existingPrediction.predictedAwayScore}</div>
+                    ) : (
+                      <div className="text-[11px] text-slate-400 italic">Nenhum palpite</div>
+                    )}
+                  </div>
+                </div>
+                <button onClick={() => setIsPredicting(true)} className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1.5 rounded-lg hover:bg-emerald-100 transition btn-feedback">
+                  {existingPrediction ? 'Alterar Palpite' : 'Dar Palpite'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        */}
+
+        {/* Prediction Results (After Match) - HIDDEN BY USER REQUEST
+        {match.status === MatchStatus.FINISHED && existingPrediction && (
+          <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/30 rounded-xl border border-slate-100 dark:border-white/5 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500">
+              <CheckCircle size={14} className={
+                (existingPrediction.predictedHomeScore === match.homeScore && existingPrediction.predictedAwayScore === match.awayScore)
+                  ? 'text-emerald-500' : 'text-slate-300'
+              } />
+              SEU PALPITE: {existingPrediction.predictedHomeScore} x {existingPrediction.predictedAwayScore}
+            </div>
+            {existingPrediction.predictedHomeScore === match.homeScore && existingPrediction.predictedAwayScore === match.awayScore ? (
+              <span className="text-[10px] font-black text-white bg-emerald-600 px-2 py-0.5 rounded-full animate-pulse shadow-lg shadow-emerald-200">ACERTOU!</span>
+            ) : (
+              <span className="text-[10px] font-bold text-slate-400">ERROU</span>
+            )}
+          </div>
+        )}
+        */}
       </div>
 
       {/* Footer / Actions */}

@@ -253,3 +253,32 @@ export interface SocialConnection {
   targetId: string; // Can be TeamID or UserID
   targetType: 'TEAM' | 'USER';
 }
+
+export interface FinancialTransaction {
+  id: string;
+  teamId: string;
+  userId?: string;
+  amount: number;
+  type: 'INCOME' | 'EXPENSE';
+  category: 'FEE' | 'RENT' | 'EQUIPMENT' | 'TRAVEL' | 'OTHER';
+  description?: string;
+  date: string;
+}
+
+export interface Trophy {
+  id: string;
+  teamId?: string;
+  playerId?: string;
+  name: string;
+  description?: string;
+  category: 'TEAM' | 'INDIVIDUAL';
+  dateAchieved?: string;
+}
+
+export interface MatchPrediction {
+  id: string;
+  matchId: string;
+  userId: string;
+  predictedHomeScore: number;
+  predictedAwayScore: number;
+}

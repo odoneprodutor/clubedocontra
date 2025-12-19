@@ -186,7 +186,8 @@ const MatchDetailView: React.FC<MatchDetailViewProps> = ({
   // --- PERMISSION LOGIC ---
   const canControl = (
     currentUser.role === UserRole.REFEREE ||
-    (currentUser.teamId === '9eb92f07-f9cf-493f-8628-7d2f66195e80') || // USER 1
+    (currentUser.teamId === '9eb92f07-f9cf-493f-8628-7d2f66195e80') || // ADMIN
+    currentUser.id === match.createdBy || // Match Creator
     ((currentUser.role === UserRole.DIRECTOR || currentUser.role === UserRole.COACH) &&
       (String(currentUser.teamId) === String(homeTeam.id) || String(currentUser.teamId) === String(awayTeam.id)))
   );

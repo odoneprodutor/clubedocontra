@@ -1,19 +1,20 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
-  Users, Trophy, Calendar, Shield, Crown, Menu, X, Plus, CheckCircle, MapPin,
+  Users, Trophy as TrophyIcon, Calendar, Shield, Crown, Menu, X, Plus, CheckCircle, MapPin,
   Home, Newspaper, Layout, Map, ArrowLeft, Filter, Save, Trash2, User, Activity,
   MessageCircle, Settings, LogOut, Bell, Heart, UserPlus, Lock, ChevronDown, ChevronUp, ChevronRight, AlertTriangle, Mail, Key,
   Camera, Briefcase, Target, Grid, List as ListIcon, Play, Video, Image as ImageIcon, Award
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import {
-  UserRole, Team, Match, Arena, MatchStatus, MatchType, AppView, Tournament, MatchEventType, Player, TacticalPosition, ChatMessage, CurrentUser, Notification, SocialConnection, UserAccount, PlayerStats, SportType, MatchMedia, PlayerEvaluation, NewsItem
+  UserRole, Team, Match, Arena, MatchStatus, MatchType, AppView, Tournament, MatchEventType, Player, TacticalPosition, ChatMessage, CurrentUser, Notification, SocialConnection, UserAccount, PlayerStats, SportType, MatchMedia, PlayerEvaluation, NewsItem, FinancialTransaction, Trophy, MatchPrediction
 } from './types';
 import {
   INITIAL_ARENAS, INITIAL_MATCHES, INITIAL_TEAMS, INITIAL_TOURNAMENTS, MOCK_NEWS, ROLE_DESCRIPTIONS, DEFAULT_DIRECTOR_ID, INITIAL_NOTIFICATIONS, INITIAL_SOCIAL, MOCK_USERS, SAFE_TEAM, SPORT_TYPE_DETAILS
 } from './constants';
 
 import { generateUUID, uploadImage, extractYoutubeId } from './utils/helpers';
+import { checkAndGrantAchievements } from './utils/achievementsSystem';
 import { useAuth } from './hooks/useAuth';
 import { CitySelect } from './components/CitySelect';
 import { LoginScreen } from './components/LoginScreen';
@@ -73,6 +74,8 @@ const App: React.FC = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [socialGraph, setSocialGraph] = useState<SocialConnection[]>([]);
   const [evaluations, setEvaluations] = useState<PlayerEvaluation[]>([]);
+  const [trophies, setTrophies] = useState<Trophy[]>([]);
+  const [matchPredictions, setMatchPredictions] = useState<MatchPrediction[]>([]);
   const [news, setNews] = useState<NewsItem[]>(MOCK_NEWS); // Initialize with Mock, then allow updates
   const [selectedNewsItem, setSelectedNewsItem] = useState<NewsItem | null>(null);
 
@@ -87,7 +90,7 @@ const App: React.FC = () => {
     const fetchData = async () => {
       setIsLoadingData(true);
       try {
-        const [usersRes, teamsRes, matchesRes, arenasRes, tournamentsRes, notifRes, socialRes, evalRes] = await Promise.all([
+        const [usersRes, teamsRes, matchesRes, arenasRes, tournamentsRes, notifRes, socialRes, evalRes, trophiesRes, matchPredictionsRes] = await Promise.all([
           supabase.from('users').select('*'),
           supabase.from('teams').select('*').eq('is_deleted', false),
           supabase.from('matches').select('*').eq('is_deleted', false),
@@ -95,7 +98,9 @@ const App: React.FC = () => {
           supabase.from('tournaments').select('*').eq('is_deleted', false),
           supabase.from('notifications').select('*'),
           supabase.from('social_connections').select('*'),
-          supabase.from('player_evaluations').select('*')
+          supabase.from('player_evaluations').select('*'),
+          supabase.from('trophies').select('*'),
+          supabase.from('match_predictions').select('*')
         ]);
 
         if (usersRes.data) setUserAccounts(usersRes.data.map((u: any) => ({ ...u, teamId: u.team_id, relatedPlayerId: u.related_player_id })));
@@ -107,6 +112,9 @@ const App: React.FC = () => {
         if (socialRes.data) setSocialGraph(socialRes.data.map((s: any) => ({ ...s, followerId: s.follower_id, targetId: s.target_id, targetType: s.target_type })));
         if (evalRes.data) setEvaluations(evalRes.data.map((e: any) => ({ ...e, playerId: e.player_id, evaluatorId: e.evaluator_id, matchId: e.match_id, technicalScore: e.technical_score, tacticalScore: e.tactical_score, physicalScore: e.physical_score, mentalScore: e.mental_score, createdAt: e.created_at })));
 
+        if (trophiesRes.data) setTrophies(trophiesRes.data.map((tr: any) => ({ ...tr, teamId: tr.team_id, playerId: tr.player_id, dateAchieved: tr.date_achieved })));
+        if (matchPredictionsRes.data) setMatchPredictions(matchPredictionsRes.data.map((mp: any) => ({ ...mp, matchId: mp.match_id, userId: mp.user_id, predictedHomeScore: mp.predicted_home_score, predictedAwayScore: mp.predicted_away_score })));
+
       } catch (error) {
         console.error("Error fetching data from Supabase:", error);
       } finally {
@@ -116,6 +124,84 @@ const App: React.FC = () => {
 
     fetchData();
   }, []);
+
+  // --- AUTOMATIC ACHIEVEMENT SYSTEM ---
+  useEffect(() => {
+    if (isLoadingData) return;
+
+    // Use a timeout to avoid blocking the main thread immediately after load/render
+    const timeoutId = setTimeout(async () => {
+      let newTrophiesToInsert: Omit<Trophy, 'id'>[] = [];
+
+      // 1. Check Teams
+      teams.forEach(team => {
+        // Team Achievements
+        const newTeamTrophies = checkAndGrantAchievements(trophies, team.id, team, 'TEAM');
+        if (newTeamTrophies.length > 0) {
+          // Ensure teamId and category are correct
+          newTrophiesToInsert = [
+            ...newTrophiesToInsert,
+            ...newTeamTrophies.map(t => ({
+              ...t,
+              teamId: team.id,
+              category: 'TEAM' as const
+            }))
+          ];
+        }
+
+        // 2. Check Players in Roster
+        team.roster.forEach(player => {
+          if (player.stats) {
+            const newPlayerTrophies = checkAndGrantAchievements(trophies, player.id, player.stats, 'PLAYER');
+
+            if (newPlayerTrophies.length > 0) {
+              newTrophiesToInsert = [
+                ...newTrophiesToInsert,
+                ...newPlayerTrophies.map(t => ({
+                  ...t,
+                  playerId: player.id,
+                  teamId: team.id,
+                  category: 'INDIVIDUAL' as const
+                }))
+              ];
+            }
+          }
+        });
+      });
+
+      if (newTrophiesToInsert.length > 0) {
+        console.log(`Awarding ${newTrophiesToInsert.length} new achievements automatically.`);
+
+        // Insert into Supabase
+        const { data, error } = await supabase.from('trophies').insert(newTrophiesToInsert.map(t => ({
+          team_id: t.teamId,
+          player_id: t.playerId,
+          name: t.name,
+          description: t.description,
+          category: t.category,
+          date_achieved: t.dateAchieved
+        }))).select();
+
+        if (error) {
+          console.error("Error auto-granting trophies:", error);
+        } else if (data) {
+          // Update local state by appending new trophies
+          setTrophies(prev => [...prev, ...data.map((d: any) => ({
+            id: d.id,
+            teamId: d.team_id,
+            playerId: d.player_id,
+            name: d.name,
+            description: d.description,
+            category: d.category,
+            dateAchieved: d.date_achieved
+          }))]);
+        }
+      }
+    }, 2000); // 2 second delay to let things settle
+
+    return () => clearTimeout(timeoutId);
+
+  }, [isLoadingData, teams, trophies.length]);
 
   // --- Automatic Cleanup of Orphaned Evaluations ---
   useEffect(() => {
@@ -220,7 +306,62 @@ const App: React.FC = () => {
   };
 
 
-  // Navigation / UI State
+
+
+  const handleSaveTrophy = async (trophy: Omit<Trophy, 'id'>) => {
+    const newTrophy = { ...trophy, id: generateUUID() };
+    const { error } = await supabase.from('trophies').insert({
+      id: newTrophy.id,
+      team_id: newTrophy.teamId,
+      player_id: newTrophy.playerId,
+      name: newTrophy.name,
+      description: newTrophy.description,
+      category: newTrophy.category,
+      date_achieved: newTrophy.dateAchieved
+    });
+
+    if (error) {
+      console.error("Error saving trophy:", error);
+      alert("Erro ao salvar conquista.");
+    } else {
+      setTrophies(prev => [...prev, newTrophy]);
+    }
+  };
+
+  const handleDeleteTrophy = async (id: string) => {
+    const { error } = await supabase.from('trophies').delete().eq('id', id);
+    if (error) {
+      console.error("Error deleting trophy:", error);
+      alert("Erro ao excluir conquista.");
+    } else {
+      setTrophies(prev => prev.filter(t => t.id !== id));
+    }
+  };
+
+  const handleSavePrediction = async (prediction: Omit<MatchPrediction, 'id'>) => {
+    const newId = generateUUID();
+    const dbPrediction = {
+      id: newId,
+      match_id: prediction.matchId,
+      user_id: prediction.userId,
+      predicted_home_score: prediction.predictedHomeScore,
+      predicted_away_score: prediction.predictedAwayScore
+    };
+
+    const { error } = await supabase.from('match_predictions').upsert(dbPrediction, { onConflict: 'match_id,user_id' });
+
+    if (error) {
+      console.error("Error saving prediction:", error);
+      alert("Erro ao salvar palpite.");
+    } else {
+      const savedPrediction: MatchPrediction = { ...prediction, id: newId };
+      setMatchPredictions(prev => {
+        const filtered = prev.filter(p => !(p.matchId === prediction.matchId && p.userId === prediction.userId));
+        return [...filtered, savedPrediction];
+      });
+      alert("Palpite salvo com sucesso!");
+    }
+  };
   const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null);
   const [selectedArenaId, setSelectedArenaId] = useState<string | null>(null); // New State
   const [isArenasMapMode, setIsArenasMapMode] = useState(false);
@@ -1637,6 +1778,7 @@ const App: React.FC = () => {
   };
 
   // --- Views Renders ---
+  if (isLoadingData) return <PageTransition />;
 
   if (!currentUser) {
     if (isLoading) return <PageTransition />;
@@ -1792,7 +1934,7 @@ const App: React.FC = () => {
               </div>
             </div>
             {/* Background decoration */}
-            <Trophy className="absolute -bottom-8 -right-8 text-white opacity-10 rotate-12" size={240} />
+            <TrophyIcon className="absolute -bottom-8 -right-8 text-white opacity-10 rotate-12" size={240} />
             <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-400 rounded-full blur-[100px] opacity-30"></div>
           </div>
 
@@ -1883,7 +2025,7 @@ const App: React.FC = () => {
           {/* Context Aware Championship Dropdown */}
           <div className="glass-panel p-6 rounded-3xl interactive-card">
             <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 text-lg">
-              <Trophy size={20} className="text-amber-500 icon-hover" />
+              <TrophyIcon size={20} className="text-amber-500 icon-hover" />
               Campeonatos
             </h3>
             {visibleTournaments.length > 0 ? (
@@ -2526,6 +2668,35 @@ const App: React.FC = () => {
                 </div>
               </div>
 
+              {/* HALL OF FAME / TROPHIES */}
+              <div className="glass-panel rounded-3xl p-6 hover:shadow-lg transition border border-slate-100 dark:border-slate-800">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-bold text-base flex items-center gap-2 text-slate-800 dark:text-white">
+                    <TrophyIcon size={18} className="text-amber-500" /> Conquistas do Time
+                  </h3>
+                  <span className="text-[10px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-bold uppercase">Galeria</span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 mb-4 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
+                  {trophies.filter(tr => tr.teamId === myTeam.id).length > 0 ? (
+                    trophies.filter(tr => tr.teamId === myTeam.id).map(tr => (
+                      <div key={tr.id} className="flex flex-col items-center text-center p-2 rounded-xl bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 group relative">
+                        <TrophyIcon size={24} className="text-amber-500 mb-1 group-hover:scale-110 transition" />
+                        <div className="text-[9px] font-black text-amber-800 dark:text-amber-400 leading-tight uppercase">{tr.name}</div>
+                        <div className="text-[8px] text-amber-600 opacity-60 font-bold">{tr.dateAchieved ? new Date(tr.dateAchieved).getFullYear() : '---'}</div>
+                        {isDirectorOwner && (
+                          <button onClick={() => handleDeleteTrophy(tr.id)} className="absolute -top-1 -right-1 bg-red-500 text-white p-0.5 rounded-full opacity-0 group-hover:opacity-100 transition"><X size={10} /></button>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <div className="col-span-full text-center py-4 text-xs text-slate-400 italic">Galeria vazia. Conquiste títulos!</div>
+                  )}
+                </div>
+
+
+              </div>
+
               {/* SQUAD LIST */}
               <div className="glass-panel rounded-3xl p-6 interactive-card">
                 <div className="flex justify-between items-center mb-4">
@@ -2571,7 +2742,7 @@ const App: React.FC = () => {
           <div className="border-t border-slate-200 dark:border-slate-800 pt-8 mt-4">
             <div className="flex items-center gap-3 mb-6">
               <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-xl">
-                < Newspaper className="text-emerald-600 dark:text-emerald-400" size={24} />
+                <Newspaper className="text-emerald-600 dark:text-emerald-400" size={24} />
               </div>
               <div>
                 <h3 className="text-2xl font-black text-slate-900 dark:text-white">Notícias & Resenhas</h3>
@@ -2707,7 +2878,7 @@ const App: React.FC = () => {
 
                 <div className="mt-4 flex items-center gap-4 text-xs font-medium text-slate-500 border-t border-slate-50 pt-3">
                   <span className="flex items-center gap-1"><Users size={14} className="text-emerald-500" /> {t.roster.length} Jogadores</span>
-                  <span className="flex items-center gap-1"><Trophy size={14} className="text-amber-500" /> {t.wins || 0} Vitórias</span>
+                  <span className="flex items-center gap-1"><TrophyIcon size={14} className="text-amber-500" /> {t.wins || 0} Vitórias</span>
                 </div>
               </div>
             </div>
@@ -2893,6 +3064,9 @@ const App: React.FC = () => {
                       match={m} homeTeam={getTeam(m.homeTeamId)} awayTeam={getTeam(m.awayTeamId)} arena={getArena(m.arenaId)}
                       userRole={currentUser!.role} onUpdateScore={handleUpdateScore} onEditDetails={(match) => { setEditingMatch(match); setIsMatchModalOpen(true); }}
                       onTeamClick={handleTeamClick}
+                      currentUserId={currentUser?.id}
+                      onSavePrediction={handleSavePrediction}
+                      existingPrediction={matchPredictions.find(p => p.matchId === m.id && p.userId === currentUser?.id)}
                     />
                   </div>
                 ))}
@@ -2930,6 +3104,9 @@ const App: React.FC = () => {
                           match={m} homeTeam={getTeam(m.homeTeamId)} awayTeam={getTeam(m.awayTeamId)} arena={getArena(m.arenaId)}
                           userRole={currentUser!.role} onUpdateScore={handleUpdateScore} onEditDetails={(match) => { setEditingMatch(match); setIsMatchModalOpen(true); }}
                           onTeamClick={handleTeamClick}
+                          currentUserId={currentUser?.id}
+                          onSavePrediction={handleSavePrediction}
+                          existingPrediction={matchPredictions.find(p => p.matchId === m.id && p.userId === currentUser?.id)}
                         />
                       </div>
                     ))}
@@ -3027,7 +3204,7 @@ const App: React.FC = () => {
         >
           <div className="absolute -right-4 -top-4 w-32 h-32 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full blur-2xl opacity-20 group-hover:opacity-30 transition"></div>
           <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition group-hover:scale-110 duration-500">
-            <Trophy size={80} />
+            <TrophyIcon size={80} />
           </div>
 
           <div className="relative z-10">
@@ -3110,7 +3287,7 @@ const App: React.FC = () => {
             </div>
           ) : (
             <div className="col-span-full py-20 text-center text-slate-400 glass-panel rounded-3xl border-dashed border-2 border-slate-200 interactive-card">
-              <Trophy size={48} className="mx-auto text-slate-300 mb-2 opacity-50" />
+              <TrophyIcon size={48} className="mx-auto text-slate-300 mb-2 opacity-50" />
               <p>Nenhum campeonato encontrado na sua região.</p>
               <p className="text-xs mt-2 text-slate-500">({currentUser?.location || 'Localização desconhecida'})</p>
             </div>
@@ -3249,7 +3426,7 @@ const App: React.FC = () => {
 
               <div className="flex items-center gap-3 cursor-pointer group" onClick={() => changeView('HOME')}>
                 <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-2.5 rounded-xl shadow-lg shadow-emerald-900/50 group-hover:scale-105 transition icon-hover">
-                  <Trophy size={22} className="text-white dark:text-white" />
+                  <TrophyIcon size={22} className="text-white dark:text-white" />
                 </div>
                 <div className="flex flex-col">
                   <span className="font-black text-xl tracking-tight leading-none">Clube<span className="text-emerald-600 dark:text-emerald-400">DoContra</span></span>
@@ -3263,7 +3440,7 @@ const App: React.FC = () => {
                   { id: 'HOME', label: 'Início', icon: Home },
                   { id: 'TEAMS', label: 'Times', icon: Users },
                   { id: 'MATCHES', label: 'Jogos', icon: Calendar },
-                  { id: 'TOURNAMENTS', label: 'Camp.', icon: Trophy },
+                  { id: 'TOURNAMENTS', label: 'Camp.', icon: TrophyIcon },
                   { id: 'ARENAS', label: 'Arenas', icon: MapPin },
                   { id: 'NEWS', label: 'Notícias', icon: Newspaper },
                 ].map((item) => {
@@ -3354,7 +3531,7 @@ const App: React.FC = () => {
             { id: 'HOME', label: 'Início', icon: Home },
             { id: 'TEAMS', label: 'Times', icon: Shield },
             { id: 'MATCHES', label: 'Jogos', icon: Calendar },
-            { id: 'TOURNAMENTS', label: 'Camp.', icon: Trophy },
+            { id: 'TOURNAMENTS', label: 'Camp.', icon: TrophyIcon },
             { id: 'NEWS', label: 'Notícias', icon: Newspaper },
           ].map((item) => {
             const isActive = currentView === item.id && !selectedMatchId;
@@ -3393,7 +3570,7 @@ const App: React.FC = () => {
                 <Users size={18} /> Novo Time
               </button>
               <button onClick={() => { setIsFabMenuOpen(false); setIsTournamentModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback">
-                <Trophy size={18} /> Novo Camp.
+                <TrophyIcon size={18} /> Novo Camp.
               </button>
               <button onClick={() => { setIsFabMenuOpen(false); setIsArenaModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback">
                 <MapPin size={18} /> Nova Arena
@@ -3754,8 +3931,11 @@ const App: React.FC = () => {
               toggleTheme={toggleTheme}
               evaluations={evaluations}
               matches={matches}
+              trophies={trophies}
               onDeleteEvaluation={handleDeleteEvaluation}
               onResetEvaluations={handleResetEvaluations}
+              onSaveTrophy={handleSaveTrophy}
+              onDeleteTrophy={handleDeleteTrophy}
             />
           </div>
         )

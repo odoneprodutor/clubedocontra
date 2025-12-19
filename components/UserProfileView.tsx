@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { UserAccount, UserRole, Team, CurrentUser, PlayerStats, SocialConnection, Match, PlayerEvaluation, MatchStatus } from '../types';
+import { UserAccount, UserRole, Team, CurrentUser, PlayerStats, SocialConnection, Match, PlayerEvaluation, MatchStatus, Trophy as TrophyType } from '../types';
 import {
-   Camera, Edit2, MapPin, Calendar, Mail, Shield, Crown, Save, X, Activity, Heart, ArrowLeft, Lock, AlertTriangle, Moon, Sun, ChevronDown, Trash2
+   Camera, Edit2, MapPin, Calendar, Mail, Shield, Crown, Save, X, Activity, Heart, ArrowLeft, Lock, AlertTriangle, Moon, Sun, ChevronDown, Trash2, Trophy
 } from 'lucide-react';
 import { ROLE_DESCRIPTIONS } from '../constants';
 
@@ -11,8 +11,9 @@ interface UserProfileViewProps {
    currentUser: CurrentUser;
    teams: Team[];
    socialGraph: SocialConnection[];
-   matches: Match[]; // New prop
-   evaluations: PlayerEvaluation[]; // New prop
+   matches: Match[];
+   evaluations: PlayerEvaluation[];
+   trophies: TrophyType[];
    onClose: () => void;
    onUpdateProfile: (updatedUser: UserAccount) => void;
    onFollow: (targetId: string) => void;
@@ -24,10 +25,12 @@ interface UserProfileViewProps {
    toggleTheme: () => void;
    onDeleteEvaluation?: (id: string) => void;
    onResetEvaluations?: (playerId: string) => void;
+   onSaveTrophy?: (trophy: Omit<TrophyType, 'id'>) => void;
+   onDeleteTrophy?: (id: string) => void;
 }
 
 const UserProfileView: React.FC<UserProfileViewProps> = ({
-   viewingUser, currentUser, teams, socialGraph, matches, evaluations, onClose, onUpdateProfile, onFollow, onTeamClick, onDeleteUser, onUploadImage, onTogglePlayerRole, theme, toggleTheme, onDeleteEvaluation, onResetEvaluations
+   viewingUser, currentUser, teams, socialGraph, matches, evaluations, trophies, onClose, onUpdateProfile, onFollow, onTeamClick, onDeleteUser, onUploadImage, onTogglePlayerRole, theme, toggleTheme, onDeleteEvaluation, onResetEvaluations, onSaveTrophy, onDeleteTrophy
 }) => {
    const isSelf = currentUser.id === viewingUser.id;
    const isFollowing = socialGraph.some(s => s.followerId === currentUser.id && s.targetId === viewingUser.id);
@@ -42,13 +45,12 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
    // Local state for which team to view details for
    const [activeTeamId, setActiveTeamId] = useState<string | null>(viewingUser.teamId || (allUserTeams.length > 0 ? allUserTeams[0].id : null));
 
-   // Check if director is also in roster of the ACTIVE team
    const activeTeam = activeTeamId ? teams.find(t => t.id === activeTeamId) : null;
    const isAlsoPlayer = activeTeam ? activeTeam.roster.some(p => p.userId === viewingUser.id) : false;
 
    const [isEditing, setIsEditing] = useState(false);
-   const [isUploading, setIsUploading] = useState(false); // New Loading State
-   const [showAllEvaluations, setShowAllEvaluations] = useState(false); // Added this line
+   const [isUploading, setIsUploading] = useState(false);
+   const [showAllEvaluations, setShowAllEvaluations] = useState(false);
 
    // Form State
    const [formData, setFormData] = useState({
@@ -63,8 +65,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
       teamId: viewingUser.teamId || ''
    });
 
-   // Calculate Player Stats if applicable for the ACTIVE team
-   // Calculate Player Stats if applicable for the ACTIVE team
    const getPlayerStats = (): PlayerStats | null => {
       if (activeTeam) {
          const player = activeTeam.roster.find(p => p.userId === viewingUser.id || p.id === viewingUser.relatedPlayerId);
@@ -76,13 +76,9 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
    };
 
    const playerStats = getPlayerStats();
-
-   // --- Derived Data ---
-   // 1. Evaluations
    const targetPlayerId = viewingUser.relatedPlayerId || activeTeam?.roster.find(p => p.userId === viewingUser.id)?.id;
    const userEvaluations = evaluations.filter(e => e.playerId === targetPlayerId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-   // 2. Recent Matches (for the active team)
    const recentMatches = activeTeamId
       ? matches
          .filter(m => (m.homeTeamId === activeTeamId || m.awayTeamId === activeTeamId) && m.status === MatchStatus.FINISHED)
@@ -90,7 +86,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
          .slice(0, 5)
       : [];
 
-   // Sync activeTeamId when viewingUser changes
    useEffect(() => {
       if (viewingUser.teamId) setActiveTeamId(viewingUser.teamId);
       else if (allUserTeams.length > 0) setActiveTeamId(allUserTeams[0].id);
@@ -224,11 +219,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                                  <option value={UserRole.DIRECTOR}>Diretor</option>
                                  <option value={UserRole.REFEREE}>Árbitro</option>
                               </select>
-                              {formData.role !== viewingUser.role && (
-                                 <span className="text-[10px] text-amber-600 flex items-center gap-1">
-                                    <AlertTriangle size={10} /> Permissões serão alteradas.
-                                 </span>
-                              )}
                            </div>
                         ) : (
                            <>
@@ -238,20 +228,6 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                                  {viewingUser.role === UserRole.REFEREE && <Shield size={20} className="text-purple-500" />}
                               </h1>
                               <p className="text-slate-500 font-medium">{ROLE_DESCRIPTIONS[viewingUser.role].split(',')[0]}</p>
-                              {isSelf && viewingUser.role === UserRole.DIRECTOR && onTogglePlayerRole && viewingUser.teamId && (
-                                 <div className="mt-2 flex items-center gap-2">
-                                    <label className="flex items-center cursor-pointer relative">
-                                       <input
-                                          type="checkbox"
-                                          className="sr-only peer"
-                                          checked={isAlsoPlayer}
-                                          onChange={(e) => onTogglePlayerRole(viewingUser.id, viewingUser.teamId!, e.target.checked)}
-                                       />
-                                       <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                                       <span className="ml-3 text-xs font-bold text-slate-600">Atuar como Jogador</span>
-                                    </label>
-                                 </div>
-                              )}
                            </>
                         )}
                      </div>
@@ -284,25 +260,14 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                               <Heart size={16} className={isFollowing ? 'fill-current' : ''} />
                               {isFollowing ? 'Seguindo' : 'Seguir'}
                            </button>
-                           {isDirector && onDeleteUser && (
-                              <button
-                                 onClick={() => onDeleteUser(viewingUser.id)}
-                                 className="px-3 py-2 bg-red-50 text-red-600 rounded-full font-bold hover:bg-red-100 transition"
-                                 title="Excluir Usuário"
-                              >
-                                 <X size={16} />
-                              </button>
-                           )}
                         </div>
                      )}
                   </div>
                </div>
 
                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  {/* LEFT COL: INFO */}
                   <div className="md:col-span-2 space-y-8">
-
-                     {/* BIO SECTION */}
+                     {/* INFO SECTION */}
                      <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-xl border border-slate-100 dark:border-slate-700">
                         <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 text-sm uppercase tracking-wide">Sobre</h3>
                         {isEditing ? (
@@ -311,77 +276,38 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                               onChange={(e) => handleChange('bio', e.target.value)}
                               className="w-full p-3 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-emerald-500"
                               rows={4}
-                              placeholder="Conte um pouco sobre você..."
                            />
                         ) : (
                            <p className="text-slate-600 dark:text-slate-300 text-sm leading-relaxed">
                               {viewingUser.bio || <span className="italic text-slate-400">Este usuário ainda não escreveu uma bio.</span>}
                            </p>
                         )}
-
                         <div className="mt-6 flex flex-wrap gap-4 text-xs font-bold text-slate-500">
-                           <div className="flex items-center gap-1.5">
-                              <MapPin size={14} className="text-slate-400" />
-                              {isEditing ? (
-                                 <input
-                                    type="text"
-                                    value={formData.location}
-                                    onChange={(e) => handleChange('location', e.target.value)}
-                                    className="border-b border-slate-300 bg-transparent focus:outline-none w-48"
-                                    placeholder="Cidade, UF"
-                                 />
-                              ) : (
-                                 viewingUser.location || 'Localização não definida'
-                              )}
-                           </div>
-                           <div className="flex items-center gap-1.5">
-                              <Mail size={14} className="text-slate-400" />
-                              {viewingUser.email}
-                           </div>
-                           <div className="flex items-center gap-1.5">
-                              <Calendar size={14} className="text-slate-400" /> Membro desde 2024
-                           </div>
+                           <div className="flex items-center gap-1.5"><MapPin size={14} /> {viewingUser.location || 'Localização não definida'}</div>
+                           <div className="flex items-center gap-1.5"><Mail size={14} /> {viewingUser.email}</div>
                         </div>
                      </div>
 
-                     {/* SECURITY SECTION (Edit Only) */}
-                     {isEditing && (
-                        <div className="bg-yellow-50 p-6 rounded-xl border border-yellow-100">
-                           <h3 className="font-bold text-yellow-800 mb-3 text-sm uppercase tracking-wide flex items-center gap-2">
-                              <Lock size={14} /> Segurança
-                           </h3>
-                           <div>
-                              <label className="block text-xs font-bold text-yellow-700 uppercase mb-1">Nova Senha</label>
-                              <input
-                                 type="password"
-                                 value={formData.password}
-                                 onChange={(e) => handleChange('password', e.target.value)}
-                                 className="w-full p-2 border border-yellow-200 rounded text-sm focus:outline-none focus:border-yellow-500"
-                              />
-                           </div>
-                        </div>
-                     )}
-
-                     {/* STATS SECTION (Player Only) */}
+                     {/* STATS SECTION */}
                      {playerStats && !isEditing && (
                         <div className="animate-in fade-in">
-                           <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                              <Activity size={18} className="text-emerald-500" /> Estatísticas da Temporada {activeTeam && <span className="text-slate-400 text-xs">({activeTeam.name})</span>}
+                           <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                              <Activity size={18} className="text-emerald-500" /> Estatísticas
                            </h3>
                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                              <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
+                              <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-center shadow-sm">
                                  <div className="text-3xl font-bold text-emerald-600">{playerStats.goals}</div>
                                  <div className="text-[10px] uppercase font-bold text-slate-400 mt-1">Gols</div>
                               </div>
-                              <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
+                              <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-center shadow-sm">
                                  <div className="text-3xl font-bold text-blue-600">{playerStats.assists}</div>
-                                 <div className="text-[10px] uppercase font-bold text-slate-400 mt-1">Assists</div>
+                                 <div className="text-[10px] uppercase font-bold text-slate-400 mt-1">Assis.</div>
                               </div>
-                              <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
-                                 <div className="text-3xl font-bold text-slate-800">{playerStats.matchesPlayed}</div>
+                              <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-center shadow-sm">
+                                 <div className="text-3xl font-bold text-slate-800 dark:text-slate-100">{playerStats.matchesPlayed}</div>
                                  <div className="text-[10px] uppercase font-bold text-slate-400 mt-1">Jogos</div>
                               </div>
-                              <div className="bg-white p-4 rounded-xl border border-slate-200 text-center shadow-sm">
+                              <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 text-center shadow-sm">
                                  <div className="text-3xl font-bold text-yellow-500">{playerStats.yellowCards}</div>
                                  <div className="text-[10px] uppercase font-bold text-slate-400 mt-1">Cartões</div>
                               </div>
@@ -389,244 +315,108 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                         </div>
                      )}
 
-                     {/* RECENT MATCHES */}
-                     {recentMatches.length > 0 && !isEditing && (
-                        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                           <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2 text-sm uppercase tracking-wide">
-                              <Calendar size={16} className="text-emerald-500" /> Últimos Jogos
-                           </h3>
-                           <div className="space-y-3">
-                              {recentMatches.map(match => {
-                                 const isHome = match.homeTeamId === activeTeamId;
-                                 const result = isHome
-                                    ? (match.homeScore > match.awayScore ? 'W' : match.homeScore < match.awayScore ? 'L' : 'D')
-                                    : (match.awayScore > match.homeScore ? 'W' : match.awayScore < match.homeScore ? 'L' : 'D');
-                                 const color = result === 'W' ? 'bg-emerald-100 text-emerald-700' : result === 'L' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-700';
-
-                                 return (
-                                    <div key={match.id} className="flex items-center justify-between text-sm pb-3 border-b border-slate-100 dark:border-slate-700 last:border-0 last:pb-0">
-                                       <div className="flex items-center gap-3">
-                                          <div className={`w-6 h-6 rounded flex items-center justify-center text-xs font-bold ${color}`}>
-                                             {result}
-                                          </div>
-                                          <div>
-                                             <span className="font-bold text-slate-700 dark:text-slate-200">{isHome ? teams.find(t => t.id === match.awayTeamId)?.name : teams.find(t => t.id === match.homeTeamId)?.name}</span>
-                                             <div className="text-[10px] text-slate-400">{new Date(match.date).toLocaleDateString()}</div>
-                                          </div>
-                                       </div>
-                                       <div className="font-mono font-bold text-slate-800 dark:text-slate-200">
-                                          {match.homeScore} - {match.awayScore}
-                                       </div>
-                                    </div>
-                                 );
-                              })}
-                           </div>
-                        </div>
-                     )}
-
                      {/* EVALUATIONS */}
                      {!isEditing && (
-                        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all">
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                            <div className="flex justify-between items-center mb-4">
                               <h3 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2 text-sm uppercase tracking-wide">
-                                 <Activity size={16} className="text-emerald-500" /> Histórico de Avaliações
+                                 <Activity size={16} className="text-emerald-500" /> Avaliações
                               </h3>
-                              {userEvaluations.length > 0 && isDirector && onResetEvaluations && targetPlayerId && (
-                                 <button
-                                    onClick={() => { if (confirm("Deseja zerar todo o histórico de avaliações deste jogador?")) onResetEvaluations(targetPlayerId); }}
-                                    className="text-[10px] font-bold text-red-500 hover:text-red-700 flex items-center gap-1 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded transition"
-                                 >
-                                    <Trash2 size={10} /> Zerar Tudo
-                                 </button>
-                              )}
                            </div>
-
                            {userEvaluations.length > 0 ? (
-                              <>
-                                 <div className="space-y-4">
-                                    {(showAllEvaluations ? userEvaluations : userEvaluations.slice(0, 2)).map(ev => {
-                                       // Attempt to find team context for evaluator
-                                       const evaluatorTeam = teams.find(t => t.createdBy === ev.evaluatorId); // Heuristic: Team Owner
-                                       const evaluatorLabel = ev.evaluatorId === currentUser.id
-                                          ? 'Você'
-                                          : (evaluatorTeam ? `Treinador (${evaluatorTeam.name})` : 'Treinador');
-
-                                       return (
-                                          <div key={ev.id} className="bg-slate-50 dark:bg-slate-700/50 p-4 rounded-lg border border-slate-100 dark:border-slate-600/50">
-                                             <div className="flex justify-between items-start mb-2">
-                                                <div>
-                                                   <div className="text-xs text-slate-400 font-bold uppercase">{new Date(ev.createdAt).toLocaleDateString()}</div>
-                                                   <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold mt-0.5">Avaliador: <span className="text-slate-700 dark:text-slate-300">{evaluatorLabel}</span></div>
-                                                </div>
-                                                <div className={`text-white font-bold px-2 py-1 rounded text-sm shadow-sm ${ev.rating >= 8 ? 'bg-emerald-500' : ev.rating >= 6 ? 'bg-yellow-500' : 'bg-red-500'}`}>
-                                                   {ev.rating.toFixed(1)}
-                                                </div>
-                                                {isDirector && onDeleteEvaluation && (
-                                                   <button
-                                                      onClick={() => { if (confirm("Excluir esta avaliação?")) onDeleteEvaluation(ev.id); }}
-                                                      className="p-1 text-slate-300 hover:text-red-500 transition ml-2"
-                                                   >
-                                                      <Trash2 size={12} />
-                                                   </button>
-                                                )}
-                                             </div>
-
-                                             {ev.comments && (
-                                                <div className="mt-2 mb-3 bg-white dark:bg-slate-800/80 p-2 rounded border border-slate-100 dark:border-slate-600/50">
-                                                   <p className="text-xs text-slate-600 dark:text-slate-300 italic font-medium">"{ev.comments}"</p>
-                                                </div>
-                                             )}
-
-                                             <div className="mt-3 grid grid-cols-4 gap-2 text-center">
-                                                <div className="bg-white dark:bg-slate-600 p-1.5 rounded shadow-sm">
-                                                   <div className="text-[8px] text-slate-400 uppercase font-black">Tec</div>
-                                                   <div className="font-bold text-xs text-slate-800 dark:text-white">{ev.technicalScore}</div>
-                                                </div>
-                                                <div className="bg-white dark:bg-slate-600 p-1.5 rounded shadow-sm">
-                                                   <div className="text-[8px] text-slate-400 uppercase font-black">Tat</div>
-                                                   <div className="font-bold text-xs text-slate-800 dark:text-white">{ev.tacticalScore}</div>
-                                                </div>
-                                                <div className="bg-white dark:bg-slate-600 p-1.5 rounded shadow-sm">
-                                                   <div className="text-[8px] text-slate-400 uppercase font-black">Fis</div>
-                                                   <div className="font-bold text-xs text-slate-800 dark:text-white">{ev.physicalScore}</div>
-                                                </div>
-                                                <div className="bg-white dark:bg-slate-600 p-1.5 rounded shadow-sm">
-                                                   <div className="text-[8px] text-slate-400 uppercase font-black">Men</div>
-                                                   <div className="font-bold text-xs text-slate-800 dark:text-white">{ev.mentalScore}</div>
-                                                </div>
-                                             </div>
-                                          </div>
-                                       );
-                                    })}
-                                 </div>
-
-                                 {userEvaluations.length > 2 && (
-                                    <button
-                                       onClick={() => setShowAllEvaluations(!showAllEvaluations)}
-                                       className="w-full mt-4 py-2 text-xs font-bold text-slate-500 hover:text-emerald-600 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-lg transition border border-dashed border-slate-200 dark:border-slate-700"
-                                    >
-                                       {showAllEvaluations ? 'Ver menos' : `Ver mais (${userEvaluations.length - 2} restantes)`}
-                                    </button>
-                                 )}
-                              </>
-                           ) : (
-                              <div className="py-12 flex flex-col items-center justify-center text-center bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-                                 <Activity size={32} className="text-slate-200 dark:text-slate-700 mb-3" />
-                                 <p className="text-slate-400 dark:text-slate-500 text-sm italic font-medium">O usuário ainda não foi avaliado pelo time.</p>
+                              <div className="space-y-4">
+                                 {userEvaluations.slice(0, 3).map(ev => (
+                                    <div key={ev.id} className="bg-slate-50 dark:bg-slate-700 p-4 rounded-lg">
+                                       <div className="flex justify-between items-center mb-2">
+                                          <div className="text-xs font-bold text-slate-400">{new Date(ev.createdAt).toLocaleDateString()}</div>
+                                          <div className="bg-emerald-500 text-white px-2 py-0.5 rounded text-xs font-bold">{ev.rating.toFixed(1)}</div>
+                                       </div>
+                                       <p className="text-xs italic text-slate-600 dark:text-slate-300">"{ev.comments}"</p>
+                                    </div>
+                                 ))}
                               </div>
+                           ) : (
+                              <p className="text-xs text-slate-400 italic">Nenhuma avaliação ainda.</p>
                            )}
                         </div>
                      )}
                   </div>
 
-                  {/* RIGHT COL: SIDEBAR */}
                   <div className="space-y-6">
-
-                     {/* SETTINGS CARD (Theme) - Only for Self */}
+                     {/* SETTINGS (Theme) */}
                      {isSelf && (
-                        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm relative overflow-hidden transition-colors duration-300">
-                           <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 text-sm uppercase tracking-wide flex items-center gap-2">
-                              Configurações
-                           </h3>
+                        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium text-slate-600 dark:text-slate-300 flex items-center gap-2">
-                                 {theme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
-                                 Modo Escuro
-                              </span>
-                              <button
-                                 onClick={toggleTheme}
-                                 className={`w-12 h-6 rounded-full p-1 transition-colors duration-300 relative ${theme === 'dark' ? 'bg-emerald-500' : 'bg-slate-300'}`}
-                              >
-                                 <div className={`w-4 h-4 rounded-full bg-white shadow transform transition-transform duration-300 ${theme === 'dark' ? 'translate-x-6' : 'translate-x-0'}`}></div>
+                              <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Modo Escuro</span>
+                              <button onClick={toggleTheme} className={`w-12 h-6 rounded-full p-1 transition ${theme === 'dark' ? 'bg-emerald-500' : 'bg-slate-300'}`}>
+                                 <div className={`w-4 h-4 rounded-full bg-white transition ${theme === 'dark' ? 'translate-x-6' : ''}`} />
                               </button>
                            </div>
                         </div>
                      )}
 
                      {/* TEAM CARD */}
-                     <div>
-                        <div className="flex justify-between items-center mb-3">
-                           <h3 className="font-bold text-slate-800 dark:text-slate-200 text-sm uppercase tracking-wide">
-                              {viewingUser.role === UserRole.FAN ? 'Time do Coração' : 'Vínculo / Times'}
-                           </h3>
-                           {allUserTeams.length > 1 && !isEditing && (
-                              <div className="relative">
-                                 <select
-                                    value={activeTeamId || ''}
-                                    onChange={(e) => setActiveTeamId(e.target.value)}
-                                    className="appearance-none bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold px-3 py-1 pr-8 rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                 >
-                                    {allUserTeams.map(t => (
-                                       <option key={t.id} value={t.id}>{t.name}</option>
-                                    ))}
-                                 </select>
-                                 <ChevronDown size={14} className="absolute right-2 top-1.5 text-slate-400 pointer-events-none" />
+                     {activeTeam && (
+                        <div onClick={() => onTeamClick(activeTeam.id)} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm cursor-pointer hover:border-emerald-500 transition">
+                           <h3 className="text-[10px] font-bold text-slate-400 uppercase mb-3">Time Atual</h3>
+                           <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold" style={{ backgroundColor: activeTeam.logoColor }}>
+                                 {activeTeam.shortName}
                               </div>
-                           )}
+                              <div className="font-bold text-slate-800 dark:text-white text-sm">{activeTeam.name}</div>
+                           </div>
                         </div>
+                     )}
 
-                        {isEditing && canEditTeam ? (
-                           <select
-                              value={formData.teamId}
-                              onChange={(e) => handleChange('teamId', e.target.value)}
-                              className="w-full p-2 border border-slate-300 rounded-lg text-sm mb-2"
-                           >
-                              <option value="">Nenhum time selecionado</option>
-                              {teams.map(t => (
-                                 <option key={t.id} value={t.id}>{t.name}</option>
-                              ))}
-                           </select>
-                        ) : (
-                           activeTeam ? (
-                              <div onClick={() => onTeamClick(activeTeam.id)} className="group bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md hover:border-emerald-400 transition cursor-pointer relative overflow-hidden">
-                                 <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-20 transition">
-                                    <Crown size={48} />
-                                 </div>
-                                 <div className="flex items-center gap-3 relative z-10">
-                                    <div className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold shadow-md border-2 border-white dark:border-slate-700 overflow-hidden" style={{ backgroundColor: activeTeam.logoColor }}>
-                                       {activeTeam.profilePicture ? (
-                                          <img src={activeTeam.profilePicture} alt={activeTeam.shortName} className="w-full h-full object-cover" />
-                                       ) : activeTeam.shortName.toUpperCase()}
-                                    </div>
-                                    <div>
-                                       <div className="font-bold text-slate-900 dark:text-slate-100 group-hover:text-emerald-600 transition">{activeTeam.name}</div>
-                                       <div className="text-xs text-slate-500 dark:text-slate-400">{activeTeam.city}</div>
-                                    </div>
-                                 </div>
-                              </div>
-                           ) : (
-                              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm text-slate-400 italic text-center">
-                                 Nenhum time vinculado.
-                              </div>
-                           )
-                        )}
-                        {isEditing && !canEditTeam && activeTeam && (
-                           <p className="text-[10px] text-slate-400 mt-2">
-                              * O vínculo do time para Diretores, Técnicos e Jogadores é estrutural e não pode ser alterado aqui. Saia do time atual para entrar em outro.
-                           </p>
-                        )}
-                     </div>
-
-                     {/* SOCIAL STATS */}
+                     {/* COMMUNITY STATS */}
                      <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
-                        <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 text-sm uppercase tracking-wide">Comunidade</h3>
-                        <div className="grid grid-cols-2 gap-4">
+                        <h3 className="text-[10px] font-bold text-slate-400 uppercase mb-3">Comunidade</h3>
+                        <div className="flex justify-around">
                            <div className="text-center">
-                              <div className="text-xl font-bold text-slate-900 dark:text-white">{socialGraph.filter(s => s.targetId === viewingUser.id).length}</div>
-                              <div className="text-[10px] text-slate-500 dark:text-slate-300 uppercase font-bold">Seguidores</div>
+                              <div className="text-lg font-bold text-slate-900 dark:text-white">{socialGraph.filter(s => s.targetId === viewingUser.id).length}</div>
+                              <div className="text-[10px] text-slate-400 uppercase font-bold">Seguidores</div>
                            </div>
                            <div className="text-center">
-                              <div className="text-xl font-bold text-slate-900 dark:text-white">{socialGraph.filter(s => s.followerId === viewingUser.id).length}</div>
-                              <div className="text-[10px] text-slate-500 dark:text-slate-300 uppercase font-bold">Seguindo</div>
+                              <div className="text-lg font-bold text-slate-900 dark:text-white">{socialGraph.filter(s => s.followerId === viewingUser.id).length}</div>
+                              <div className="text-[10px] text-slate-400 uppercase font-bold">Seguindo</div>
                            </div>
                         </div>
                      </div>
 
+                     {/* ACHIEVEMENTS CARD */}
+                     <div className="bg-gradient-to-br from-amber-50 to-white dark:from-amber-900/10 dark:to-slate-800 p-4 rounded-xl border border-amber-200 dark:border-amber-900/30 shadow-sm relative overflow-hidden group">
+                        <div className="absolute top-0 right-0 p-2 opacity-5 group-hover:opacity-10 transition"><Trophy size={48} /></div>
+                        <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 text-xs uppercase tracking-wide flex items-center gap-2">
+                           <Trophy size={14} className="text-amber-500" /> Conquistas
+                        </h3>
+
+                        <div className="space-y-2">
+                           {trophies.filter(tr => tr.playerId === viewingUser.id || (targetPlayerId && tr.playerId === targetPlayerId)).length > 0 ? (
+                              trophies.filter(tr => tr.playerId === viewingUser.id || (targetPlayerId && tr.playerId === targetPlayerId)).map(tr => (
+                                 <div key={tr.id} className="flex items-center justify-between gap-3 p-2 rounded-lg bg-white/60 dark:bg-white/5 border border-amber-100 dark:border-amber-900/20 group/trophy">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                       <Trophy size={12} className="text-amber-500" />
+                                       <div className="min-w-0">
+                                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{tr.name}</div>
+                                       </div>
+                                    </div>
+                                    {isDirector && onDeleteTrophy && (
+                                       <button onClick={() => { if (confirm("Remover conquista?")) onDeleteTrophy(tr.id); }} className="text-slate-300 hover:text-red-500 opacity-0 group-hover/trophy:opacity-100 transition"><X size={12} /></button>
+                                    )}
+                                 </div>
+                              ))
+                           ) : (
+                              <div className="py-4 text-center text-[10px] text-slate-400 italic">Sem conquistas ainda.</div>
+                           )}
+
+
+                        </div>
+                     </div>
                   </div>
                </div>
             </div>
          </div>
-      </div >
+      </div>
    );
 };
 
