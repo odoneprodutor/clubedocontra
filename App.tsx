@@ -93,25 +93,27 @@ const App: React.FC = () => {
       // Logic for Google Login and Token Refresh
       if (event === 'SIGNED_IN' && session?.user) {
         console.log("Supabase Auth Event: SIGNED_IN", session.user.email);
-        setIsLoadingData(true);
+        // REMOVED BLOCKING LOADING: setIsLoadingData(true);
 
         const { email, id } = session.user;
         const name = session.user.user_metadata.full_name || email?.split('@')[0];
         const avatar = session.user.user_metadata.avatar_url;
 
         try {
-          // 1. Check if user exists in public.users
-          // We use 'email' as the reliable link for social login in this hybrid system
+          console.log("🔎 Auth Listener: Checking if user exists in DB...");
           const { data: existingUser, error } = await supabase.from('users').select('*').eq('email', email).single();
+
+          if (error && error.code !== 'PGRST116') { // PGRST116 is "Row not found"
+            console.error("❌ Auth Listener Error fetching user:", error);
+          }
 
           let appUser: UserAccount;
 
           if (existingUser) {
-            // User exists, map to App User
+            console.log("✅ User found in DB:", existingUser.id);
             appUser = { ...existingUser, teamId: existingUser.team_id, role: existingUser.role };
           } else {
-            // 2. Create New User if not exists
-            console.log("Creating new user for Google Login...");
+            console.log("🆕 User not found. Creating new user...");
             const newUserPayload = {
               id: id,
               email: email!,
@@ -125,14 +127,15 @@ const App: React.FC = () => {
             const { error: insertError } = await supabase.from('users').insert(newUserPayload);
 
             if (insertError) {
-              console.error("Error creating public user:", insertError);
-              // If error is duplicate key, it implies race condition or id conflict, try to fetch again?
-              // For now, assume success or critical failure.
+              console.error("❌ Error creating public user:", insertError);
+            } else {
+              console.log("✅ New user created successfully.");
             }
             appUser = { ...newUserPayload, teamId: null } as any;
           }
 
           // 3. Update Global State
+          console.log("🔄 Updating CurrentUser State...");
           setCurrentUser({
             id: appUser.id,
             name: appUser.name,
@@ -142,11 +145,10 @@ const App: React.FC = () => {
             location: appUser.location,
             avatar: appUser.avatar
           });
+          console.log("✨ CurrentUser Updated!");
 
         } catch (err) {
           console.error("Auth flow error:", err);
-        } finally {
-          setIsLoadingData(false);
         }
       } else if (event === 'SIGNED_OUT') {
         // Optional: clear state if we were relying on it, but manual logout handles this usually.
@@ -218,9 +220,19 @@ const App: React.FC = () => {
   // FETCH DATA FROM SUPABASE
   useEffect(() => {
     const fetchData = async () => {
+      console.log("🚀 STARTING FETCH DATA...");
       setIsLoadingData(true);
+
+      // --- TRAVA DE SEGURANÇA (TIMEOUT) ---
+      // Se o Supabase não responder em 5 segundos, libera o app de força bruta.
+      const safetyTimeout = setTimeout(() => {
+        console.warn("⚠️ ALERTA: Supabase demorou demais. Liberando app via Safety Timeout.");
+        setIsLoadingData(false);
+      }, 5000);
+
       try {
-        const [usersRes, teamsRes, matchesRes, arenasRes, tournamentsRes, notifRes, socialRes, evalRes, trophiesRes, matchPredictionsRes] = await Promise.all([
+        console.log("... sending Supabase requests...");
+        const results = await Promise.allSettled([
           supabase.from('users').select('*'),
           supabase.from('teams').select('*').eq('is_deleted', false),
           supabase.from('matches').select('*').eq('is_deleted', false),
@@ -232,22 +244,56 @@ const App: React.FC = () => {
           supabase.from('trophies').select('*'),
           supabase.from('match_predictions').select('*')
         ]);
+        console.log("✅ REQUESTS FINISHED", results);
 
-        if (usersRes.data) setUserAccounts(usersRes.data.map((u: any) => ({ ...u, teamId: u.team_id, relatedPlayerId: u.related_player_id })));
-        if (teamsRes.data) setTeams(teamsRes.data.map((t: any) => ({ ...t, logoColor: t.logo_color, primaryColor: t.primary_color, secondaryColor: t.secondary_color, tertiaryColor: t.tertiary_color, cover: t.cover, profilePicture: t.profile_picture, createdBy: t.created_by, isDeleted: t.is_deleted, goalsFor: t.goals_for, goalsAgainst: t.goals_against, shortName: t.short_name, tacticalFormation: t.tactical_formation })));
-        if (matchesRes.data) setMatches(matchesRes.data.map((m: any) => ({ ...m, homeTeamId: m.home_team_id, awayTeamId: m.away_team_id, arenaId: m.arena_id, sportType: m.sport_type, tournamentId: m.tournament_id, homeScore: m.home_score, awayScore: m.away_score, youtubeVideoId: m.youtube_video_id, createdBy: m.created_by, isDeleted: m.is_deleted, chatMessages: m.chat_messages, homeTactics: m.home_tactics, awayTactics: m.away_tactics })));
-        if (arenasRes.data) setArenas(arenasRes.data.map((a: any) => ({ ...a, googleMapsUrl: a.google_maps_url, profilePicture: a.profile_picture, coverPicture: a.cover_picture })));
-        if (tournamentsRes.data) setTournaments(tournamentsRes.data.map((t: any) => ({ ...t, sportType: t.sport_type, currentRound: t.current_round, totalRounds: t.total_rounds, participatingTeamIds: t.participating_team_ids, createdBy: t.created_by, isDeleted: t.is_deleted })));
-        if (notifRes.data) setNotifications(notifRes.data.map((n: any) => ({ ...n, fromId: n.from_id, fromName: n.from_name, toUserId: n.to_user_id, isRead: n.is_read })));
-        if (socialRes.data) setSocialGraph(socialRes.data.map((s: any) => ({ ...s, followerId: s.follower_id, targetId: s.target_id, targetType: s.target_type })));
-        if (evalRes.data) setEvaluations(evalRes.data.map((e: any) => ({ ...e, playerId: e.player_id, evaluatorId: e.evaluator_id, matchId: e.match_id, technicalScore: e.technical_score, tacticalScore: e.tactical_score, physicalScore: e.physical_score, mentalScore: e.mental_score, createdAt: e.created_at })));
+        const [usersRes, teamsRes, matchesRes, arenasRes, tournamentsRes, notifRes, socialRes, evalRes, trophiesRes, matchPredictionsRes] = results;
 
-        if (trophiesRes.data) setTrophies(trophiesRes.data.map((tr: any) => ({ ...tr, teamId: tr.team_id, playerId: tr.player_id, dateAchieved: tr.date_achieved })));
-        if (matchPredictionsRes.data) setMatchPredictions(matchPredictionsRes.data.map((mp: any) => ({ ...mp, matchId: mp.match_id, userId: mp.user_id, predictedHomeScore: mp.predicted_home_score, predictedAwayScore: mp.predicted_away_score })));
+        // Helper to get data safely
+        const getData = (res: any) => (res.status === 'fulfilled' && res.value.data) ? res.value.data : [];
 
+        if (usersRes.status === 'rejected') console.error("Error fetching users:", usersRes.reason);
+        const usersData = getData(usersRes);
+        setUserAccounts(usersData.map((u: any) => ({ ...u, teamId: u.team_id, relatedPlayerId: u.related_player_id })));
+
+        // ... (rest of setters)
+
+        if (teamsRes.status === 'rejected') console.error("Error fetching teams:", teamsRes.reason);
+        const teamsData = getData(teamsRes);
+        setTeams(teamsData.map((t: any) => ({ ...t, logoColor: t.logo_color, primaryColor: t.primary_color, secondaryColor: t.secondary_color, tertiaryColor: t.tertiary_color, cover: t.cover, profilePicture: t.profile_picture, createdBy: t.created_by, isDeleted: t.is_deleted, goalsFor: t.goals_for, goalsAgainst: t.goals_against, shortName: t.short_name, tacticalFormation: t.tactical_formation })));
+
+        const matchesData = getData(matchesRes);
+        setMatches(matchesData.map((m: any) => ({ ...m, homeTeamId: m.home_team_id, awayTeamId: m.away_team_id, arenaId: m.arena_id, sportType: m.sport_type, tournamentId: m.tournament_id, homeScore: m.home_score, awayScore: m.away_score, youtubeVideoId: m.youtube_video_id, createdBy: m.created_by, isDeleted: m.is_deleted, chatMessages: m.chat_messages, homeTactics: m.home_tactics, awayTactics: m.away_tactics })));
+
+        const arenasData = getData(arenasRes);
+        setArenas(arenasData.map((a: any) => ({ ...a, googleMapsUrl: a.google_maps_url, profilePicture: a.profile_picture, coverPicture: a.cover_picture })));
+
+        const tournamentsData = getData(tournamentsRes);
+        setTournaments(tournamentsData.map((t: any) => ({ ...t, sportType: t.sport_type, currentRound: t.current_round, totalRounds: t.total_rounds, participatingTeamIds: t.participating_team_ids, createdBy: t.created_by, isDeleted: t.is_deleted })));
+
+        const notifData = getData(notifRes);
+        setNotifications(notifData.map((n: any) => ({ ...n, fromId: n.from_id, fromName: n.from_name, toUserId: n.to_user_id, isRead: n.is_read })));
+
+        const socialData = getData(socialRes);
+        setSocialGraph(socialData.map((s: any) => ({ ...s, followerId: s.follower_id, targetId: s.target_id, targetType: s.target_type })));
+
+        const evalData = getData(evalRes);
+        setEvaluations(evalData.map((e: any) => ({ ...e, playerId: e.player_id, evaluatorId: e.evaluator_id, matchId: e.match_id, technicalScore: e.technical_score, tacticalScore: e.tactical_score, physicalScore: e.physical_score, mentalScore: e.mental_score, createdAt: e.created_at })));
+
+        // New tables - might fail if migration didn't run
+        if (trophiesRes.status === 'rejected') console.warn("Trophies table might be missing or empty");
+        const trophiesData = getData(trophiesRes);
+        setTrophies(trophiesData.map((tr: any) => ({ ...tr, teamId: tr.team_id, playerId: tr.player_id, dateAchieved: tr.date_achieved })));
+
+        if (matchPredictionsRes.status === 'rejected') console.warn("Match Predictions table might be missing");
+        const matchPredictionsData = getData(matchPredictionsRes);
+        setMatchPredictions(matchPredictionsData.map((mp: any) => ({ ...mp, matchId: mp.match_id, userId: mp.user_id, predictedHomeScore: mp.predicted_home_score, predictedAwayScore: mp.predicted_away_score })));
+
+        console.log("🏁 DATA SET COMPLETE");
       } catch (error) {
-        console.error("Error fetching data from Supabase:", error);
+        console.error("Critical Error in fetchData loop:", error);
       } finally {
+        clearTimeout(safetyTimeout); // Cancela o timeout se tudo der certo antes
+        console.log("🔓 SETTING LOADING FALSE");
         setIsLoadingData(false);
       }
     };

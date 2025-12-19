@@ -56,9 +56,16 @@ export const useAuth = () => {
     };
 
     const handleLogout = async (onSuccess: () => void) => {
-        await supabase.auth.signOut(); // Clear Supabase session
+        // Optimistic Logout: Clear state immediately
         setCurrentUser(null);
         onSuccess();
+
+        try {
+            // Attempt to clear server session in background
+            await supabase.auth.signOut();
+        } catch (error) {
+            console.error("Logout warning (session might be stuck on server):", error);
+        }
     };
 
     const handleUpdateProfile = async (updatedUser: UserAccount) => {

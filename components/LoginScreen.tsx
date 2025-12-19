@@ -3,6 +3,7 @@ import { UserAccount, Team, UserRole } from '../types';
 import { Trophy, AlertTriangle, User, Mail, Key, UserPlus } from 'lucide-react';
 import { CitySelect } from './CitySelect';
 import { uploadImage } from '../utils/helpers';
+import { supabase } from '../supabaseClient';
 
 interface LoginScreenProps {
     users: UserAccount[];
@@ -270,12 +271,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin,
                             <button
                                 type="button"
                                 onClick={async () => {
-                                    const { error } = await import('../supabaseClient').then(m => m.supabase.auth.signInWithOAuth({
+                                    const { error } = await supabase.auth.signInWithOAuth({
                                         provider: 'google',
                                         options: {
                                             redirectTo: window.location.origin
                                         }
-                                    }));
+                                    });
                                     if (error) setError(error.message);
                                 }}
                                 className="btn-feedback w-full bg-white border border-slate-200 text-slate-700 font-bold py-3 rounded-xl shadow-sm hover:bg-slate-50 flex items-center justify-center gap-3 transition"
