@@ -206,6 +206,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin,
                                             <option value={UserRole.DIRECTOR}>Diretor Esportivo</option>
                                             <option value={UserRole.REFEREE}>Árbitro</option>
                                         </select>
+                                        {role === UserRole.DIRECTOR && (
+                                            <div className="mt-2 text-[10px] text-amber-600 bg-amber-50 p-2 rounded-lg border border-amber-100 flex items-start gap-2">
+                                                <AlertTriangle size={12} className="mt-0.5 shrink-0" />
+                                                <span>Apenas Diretores podem criar novos times. Jogadores devem se juntar a times existentes.</span>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {needsTeamSelection && (
@@ -217,7 +223,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin,
                                                 value={selectedTeamId}
                                                 onChange={(e) => setSelectedTeamId(e.target.value)}
                                                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 transition text-sm cursor-pointer input-focus-effect"
-                                                required
                                             >
                                                 <option value="">Selecione um time...</option>
                                                 {teams.map(t => (

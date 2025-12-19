@@ -27,10 +27,13 @@ interface UserProfileViewProps {
    onResetEvaluations?: (playerId: string) => void;
    onSaveTrophy?: (trophy: Omit<TrophyType, 'id'>) => void;
    onDeleteTrophy?: (id: string) => void;
+   onBrowseTeams?: () => void;
+   onInviteToTeam?: () => void;
+
 }
 
 const UserProfileView: React.FC<UserProfileViewProps> = ({
-   viewingUser, currentUser, teams, socialGraph, matches, evaluations, trophies, onClose, onUpdateProfile, onFollow, onTeamClick, onDeleteUser, onUploadImage, onTogglePlayerRole, theme, toggleTheme, onDeleteEvaluation, onResetEvaluations, onSaveTrophy, onDeleteTrophy
+   viewingUser, currentUser, teams, socialGraph, matches, evaluations, trophies, onClose, onUpdateProfile, onFollow, onTeamClick, onDeleteUser, onUploadImage, onTogglePlayerRole, theme, toggleTheme, onDeleteEvaluation, onResetEvaluations, onSaveTrophy, onDeleteTrophy, onBrowseTeams, onInviteToTeam
 }) => {
    const isSelf = currentUser.id === viewingUser.id;
    const isFollowing = socialGraph.some(s => s.followerId === currentUser.id && s.targetId === viewingUser.id);
@@ -46,6 +49,13 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
    const [activeTeamId, setActiveTeamId] = useState<string | null>(viewingUser.teamId || (allUserTeams.length > 0 ? allUserTeams[0].id : null));
 
    const activeTeam = activeTeamId ? teams.find(t => t.id === activeTeamId) : null;
+   // Verify if user is actually IN the team (Roster) or Managing it
+   const isActuallyInTeam = activeTeam ? (
+      activeTeam.roster.some(p => p.userId === viewingUser.id) ||
+      viewingUser.role === UserRole.DIRECTOR ||
+      viewingUser.role === UserRole.COACH ||
+      viewingUser.role === UserRole.FAN
+   ) : false;
    const isAlsoPlayer = activeTeam ? activeTeam.roster.some(p => p.userId === viewingUser.id) : false;
 
    const [isEditing, setIsEditing] = useState(false);
@@ -345,18 +355,19 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                   <div className="space-y-6">
                      {/* SETTINGS (Theme) */}
                      {isSelf && (
-                        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm space-y-3">
                            <div className="flex items-center justify-between">
                               <span className="text-sm font-bold text-slate-700 dark:text-slate-200">Modo Escuro</span>
                               <button onClick={toggleTheme} className={`w-12 h-6 rounded-full p-1 transition ${theme === 'dark' ? 'bg-emerald-500' : 'bg-slate-300'}`}>
                                  <div className={`w-4 h-4 rounded-full bg-white transition ${theme === 'dark' ? 'translate-x-6' : ''}`} />
                               </button>
                            </div>
+
                         </div>
                      )}
 
                      {/* TEAM CARD */}
-                     {activeTeam && (
+                     {(activeTeam && isActuallyInTeam) ? (
                         <div onClick={() => onTeamClick(activeTeam.id)} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm cursor-pointer hover:border-emerald-500 transition">
                            <h3 className="text-[10px] font-bold text-slate-400 uppercase mb-3">Time Atual</h3>
                            <div className="flex items-center gap-3">
@@ -364,6 +375,29 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                                  {activeTeam.shortName}
                               </div>
                               <div className="font-bold text-slate-800 dark:text-white text-sm">{activeTeam.name}</div>
+                           </div>
+                        </div>
+                     ) : (
+                        // NO TEAM CTA
+                        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-600 shadow-sm">
+                           <h3 className="text-[10px] font-bold text-slate-400 uppercase mb-3">Time Atual</h3>
+                           <div className="text-center py-2">
+                              {isSelf ? (
+                                 <button onClick={onBrowseTeams} className="w-full py-3 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-lg text-sm font-bold flex flex-col items-center gap-1 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition">
+                                    <Shield size={20} />
+                                    Encontrar ou Criar Time
+                                 </button>
+                              ) : (
+                                 <div className="text-sm text-slate-400 italic flex flex-col items-center gap-2">
+                                    <Shield size={24} className="opacity-50" />
+                                    <span>Sem time no momento (Agente Livre)</span>
+                                    {currentUser.role === UserRole.DIRECTOR && (
+                                       <button onClick={onInviteToTeam} className="mt-2 text-xs bg-emerald-600 text-white px-3 py-1.5 rounded-lg font-bold shadow hover:bg-emerald-500 transition">
+                                          Convidar para Teste
+                                       </button>
+                                    )}
+                                 </div>
+                              )}
                            </div>
                         </div>
                      )}

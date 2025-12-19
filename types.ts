@@ -206,7 +206,7 @@ export interface NewsItem {
   externalLink?: string; // Stream link
 }
 
-export type AppView = 'HOME' | 'TEAMS' | 'MATCHES' | 'TOURNAMENTS' | 'ARENAS' | 'NEWS' | 'PROFILE';
+export type AppView = 'HOME' | 'TEAMS' | 'MATCHES' | 'TOURNAMENTS' | 'ARENAS' | 'NEWS' | 'PROFILE' | 'PLAYERS';
 
 // Robust Session Object
 export interface CurrentUser {

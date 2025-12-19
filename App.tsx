@@ -3,7 +3,7 @@ import {
   Users, Trophy as TrophyIcon, Calendar, Shield, Crown, Menu, X, Plus, CheckCircle, MapPin,
   Home, Newspaper, Layout, Map, ArrowLeft, Filter, Save, Trash2, User, Activity,
   MessageCircle, Settings, LogOut, Bell, Heart, UserPlus, Lock, ChevronDown, ChevronUp, ChevronRight, AlertTriangle, Mail, Key,
-  Camera, Briefcase, Target, Grid, List as ListIcon, Play, Video, Image as ImageIcon, Award
+  Camera, Briefcase, Target, Grid, List as ListIcon, Play, Video, Image as ImageIcon, Award, Search
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 import {
@@ -27,6 +27,7 @@ import UserProfileView from './components/UserProfileView';
 import ArenasMapView from './components/ArenasMapView';
 import ArenaDetailView from './components/ArenaDetailView';
 import { RosterManager } from './components/RosterManager';
+import PlayerDirectory from './components/PlayerDirectory';
 
 // --- Safe Fallback Objects (Prevents crash when data is empty) ---
 const SAFE_ARENA: Arena = {
@@ -399,6 +400,7 @@ const App: React.FC = () => {
   const [isArenaModalOpen, setIsArenaModalOpen] = useState(false); // Arena Creation
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [selectedTeamIdForInvite, setSelectedTeamIdForInvite] = useState<string | null>(null);
+  const [inviteModalEmail, setInviteModalEmail] = useState<string | null>(null); // NEW STATE FOR PRE-FILLING EMAIL
 
   // FAB State
   const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
@@ -493,6 +495,31 @@ const App: React.FC = () => {
     };
     const { error } = await supabase.from('users').insert(dbUser);
     if (error) console.error("Register Error:", error);
+
+    // Auto-add to Roster if Player/Coach with a team
+    if ((newUser.role === UserRole.PLAYER || newUser.role === UserRole.COACH) && newUser.teamId) {
+      const targetTeam = teams.find(t => t.id === newUser.teamId);
+      if (targetTeam) {
+        const newPlayer: Player = {
+          id: `p-${newUser.id}`,
+          name: newUser.name,
+          number: 99, // Default
+          position: 'Curinga',
+          stats: { goals: 0, assists: 0, yellowCards: 0, redCards: 0, matchesPlayed: 0 },
+          userId: newUser.id,
+
+        };
+
+        const updatedRoster = [...targetTeam.roster, newPlayer];
+
+        // Update DB
+        await supabase.from('teams').update({ roster: updatedRoster }).eq('id', targetTeam.id);
+
+        // Update Local State
+        setTeams(prev => prev.map(t => t.id === targetTeam.id ? { ...t, roster: updatedRoster } : t));
+      }
+    }
+
     setUserAccounts(prev => [...prev, newUser]);
   };
 
@@ -531,10 +558,6 @@ const App: React.FC = () => {
   };
 
   // --- Actions ---
-
-  // MATCH CRUD
-
-
 
   const handleTogglePlayerRole = async (userId: string, teamId: string, shouldBePlayer: boolean) => {
     const team = teams.find(t => t.id === teamId);
@@ -1705,10 +1728,12 @@ const App: React.FC = () => {
           isRead: false,
           timestamp: new Date().toISOString()
         };
-        setNotifications(prev => [...prev, localNotif]);
-        alert(`Convite enviado para ${targetUser.name}!`);
+        // Close modal first for better UX
         setIsInviteModalOpen(false);
         setSelectedTeamIdForInvite(null);
+        setInviteModalEmail(null);
+
+        alert(`Convite enviado para ${targetUser.name}!`);
       }
     } else {
       alert("Usuário não encontrado (Simulação: Convite enviado por email).");
@@ -1775,6 +1800,16 @@ const App: React.FC = () => {
 
     // Mark as read
     setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n));
+  };
+
+  const handleDeclineInvite = (notificationId: string) => {
+    const notif = notifications.find(n => n.id === notificationId);
+    if (!notif) return;
+
+    // Just mark as read (effectively declining by ignoring)
+    // Optionally we could send a notification back to the sender
+    setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, isRead: true } : n));
+    alert("Convite recusado.");
   };
 
   // --- Views Renders ---
@@ -3442,6 +3477,7 @@ const App: React.FC = () => {
                   { id: 'MATCHES', label: 'Jogos', icon: Calendar },
                   { id: 'TOURNAMENTS', label: 'Camp.', icon: TrophyIcon },
                   { id: 'ARENAS', label: 'Arenas', icon: MapPin },
+                  { id: 'PLAYERS', label: 'Mercado', icon: Search },
                   { id: 'NEWS', label: 'Notícias', icon: Newspaper },
                 ].map((item) => {
                   const isActive = currentView === item.id && !selectedMatchId;
@@ -3457,6 +3493,7 @@ const App: React.FC = () => {
                     </button>
                   );
                 })}
+
               </div>
 
               <div className="flex items-center gap-4">
@@ -3484,9 +3521,14 @@ const App: React.FC = () => {
                               {n.type === 'TOURNAMENT_INVITE' && (
                                 <p className="text-xs text-slate-500 mb-3">Convidou <span className="font-bold">{n.data?.teamName}</span> para o campeonato <span className="font-bold">{n.data?.tournamentName}</span></p>
                               )}
-                              <button onClick={() => handleAcceptInvite(n.id)} className="w-full bg-emerald-600 hover:bg-emerald-500 text-white text-xs py-2 rounded-lg font-bold shadow-md transition btn-feedback">
-                                Aceitar Convite
-                              </button>
+                              <div className="flex gap-2">
+                                <button onClick={() => handleDeclineInvite(n.id)} className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs py-2 rounded-lg font-bold transition btn-feedback">
+                                  Recusar
+                                </button>
+                                <button onClick={() => handleAcceptInvite(n.id)} className="flex-[2] bg-emerald-600 hover:bg-emerald-500 text-white text-xs py-2 rounded-lg font-bold shadow-md transition btn-feedback">
+                                  Aceitar Convite
+                                </button>
+                              </div>
                             </div>
                           ))
                         )}
@@ -3522,6 +3564,17 @@ const App: React.FC = () => {
         {currentView === 'TOURNAMENTS' && renderTournamentsView()}
         {currentView === 'ARENAS' && renderArenasView()}
         {currentView === 'NEWS' && renderNewsView()}
+        {currentView === 'PLAYERS' && (
+          <div className="p-4 md:p-8 max-w-7xl mx-auto w-full">
+            <PlayerDirectory
+              users={userAccounts}
+              currentUser={currentUser!}
+              socialGraph={socialGraph}
+              onFollow={handleFollow}
+              onViewProfile={(uid) => setViewingProfileId(uid)}
+            />
+          </div>
+        )}
       </main>
 
       {/* --- Mobile Bottom Navigation --- */}
@@ -3531,6 +3584,7 @@ const App: React.FC = () => {
             { id: 'HOME', label: 'Início', icon: Home },
             { id: 'TEAMS', label: 'Times', icon: Shield },
             { id: 'MATCHES', label: 'Jogos', icon: Calendar },
+            { id: 'PLAYERS', label: 'Mercado', icon: Search },
             { id: 'TOURNAMENTS', label: 'Camp.', icon: TrophyIcon },
             { id: 'NEWS', label: 'Notícias', icon: Newspaper },
           ].map((item) => {
@@ -3788,21 +3842,7 @@ const App: React.FC = () => {
         </div >
       )}
 
-      {/* 2.5 INVITE MODAL */}
-      {isInviteModalOpen && selectedTeamIdForInvite && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-          <div className="glass-panel rounded-2xl p-8 max-w-sm w-full relative">
-            <button onClick={() => { setIsInviteModalOpen(false); setSelectedTeamIdForInvite(null); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 btn-feedback"><X size={20} /></button>
-            <h3 className="font-bold text-xl mb-2 text-slate-800">Convidar Membro</h3>
-            <p className="text-sm text-slate-500 mb-6">Para <strong>{getTeam(selectedTeamIdForInvite).name}</strong></p>
-            <form onSubmit={handleSendInvite}>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Email do Usuário</label>
-              <input type="email" name="email" className="w-full border border-slate-300 rounded-xl p-3 text-sm mb-6 focus:ring-2 focus:ring-emerald-500 outline-none input-focus-effect" placeholder="exemplo@email.com" required />
-              <button type="submit" className="btn-feedback w-full bg-emerald-600 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200">Enviar Convite</button>
-            </form>
-          </div>
-        </div>
-      )}
+
 
       {/* 3. TOURNAMENT MODAL */}
       {
@@ -3920,6 +3960,27 @@ const App: React.FC = () => {
               onUpdateProfile={handleUpdateProfile}
               onFollow={handleFollow}
               onTeamClick={(teamId) => { setViewingProfileId(null); setViewingTeamId(teamId); setCurrentView('TEAMS'); }}
+              onBrowseTeams={() => { setViewingProfileId(null); setCurrentView('TEAMS'); }}
+              onInviteToTeam={() => {
+                const targetUser = userAccounts.find(u => u.id === viewingProfileId);
+
+                // Robust Team Detection for Director
+                let myTeamId = currentUser?.teamId;
+                if (!myTeamId && currentUser?.role === UserRole.DIRECTOR) {
+                  // Fallback: Check if I am the creator of any team
+                  const ownedTeam = teams.find(t => t.createdBy === currentUser.id);
+                  if (ownedTeam) myTeamId = ownedTeam.id;
+                }
+
+                if (myTeamId) {
+                  setSelectedTeamIdForInvite(myTeamId);
+                  setInviteModalEmail(targetUser?.email || '');
+                  setIsInviteModalOpen(true);
+                } else {
+                  alert("Você precisa ser Diretor de um time para convidar. Verifique se você criou ou está vinculado a um time.");
+                }
+              }}
+
               onDeleteUser={(userId) => {
                 if (confirm("Tem certeza que deseja remover este usuário?")) {
                   alert("Funcionalidade de exclusão de usuário a ser implementada completamente.");
@@ -4093,6 +4154,22 @@ const App: React.FC = () => {
           </div>
         )
       }
+
+      {/* INVITE MODAL (Moved to end for z-index stacking) */}
+      {isInviteModalOpen && selectedTeamIdForInvite && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in zoom-in-95">
+          <div className="glass-panel rounded-2xl p-8 max-w-sm w-full relative">
+            <button onClick={() => { setIsInviteModalOpen(false); setSelectedTeamIdForInvite(null); setInviteModalEmail(null); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 btn-feedback"><X size={20} /></button>
+            <h3 className="font-bold text-xl mb-2 text-slate-800">Convidar Membro</h3>
+            <p className="text-sm text-slate-500 mb-6">Para <strong>{getTeam(selectedTeamIdForInvite).name}</strong></p>
+            <form onSubmit={handleSendInvite}>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Email do Usuário</label>
+              <input type="email" name="email" defaultValue={inviteModalEmail || ''} className="w-full border border-slate-300 rounded-xl p-3 text-sm mb-6 focus:ring-2 focus:ring-emerald-500 outline-none input-focus-effect" placeholder="exemplo@email.com" required />
+              <button type="submit" className="btn-feedback w-full bg-emerald-600 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200">Enviar Convite</button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* END APP */}
 
