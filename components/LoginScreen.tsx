@@ -48,14 +48,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin,
                 return;
             }
 
-            if ((role === UserRole.COACH || role === UserRole.PLAYER || role === UserRole.FAN) && !selectedTeamId) {
-                if (teams.length === 0) {
-                    setError("Não existem times cadastrados. Registre-se como DIRETOR primeiro para criar um time.");
-                    return;
-                }
-                setError("Por favor, selecione um time.");
-                return;
-            }
+            // Team selection is now optional for all roles
+            // Users can join teams later via invite or profile settings
 
             const newUser: UserAccount = {
                 id: crypto.randomUUID(),
@@ -65,7 +59,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin,
                 role,
                 location: location || 'Desconhecida',
                 avatar: avatar || undefined,
-                teamId: (role === UserRole.COACH || role === UserRole.PLAYER || role === UserRole.FAN) && selectedTeamId ? selectedTeamId : null
+                teamId: selectedTeamId || null
             };
 
             onRegister(newUser);
@@ -141,6 +135,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin,
                         )}
 
                         <form onSubmit={handleSubmit} className="space-y-5">
+
                             {isRegistering && (
                                 <div>
                                     <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Nome Completo</label>
@@ -274,7 +269,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin,
                                     const { error } = await supabase.auth.signInWithOAuth({
                                         provider: 'google',
                                         options: {
-                                            redirectTo: 'https://clubedocontra.com.br'
+                                            redirectTo: 'https://clubedocontra.com.br/'
                                         }
                                     });
                                     if (error) setError(error.message);
