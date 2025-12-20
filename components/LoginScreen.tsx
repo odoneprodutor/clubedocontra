@@ -274,7 +274,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ users, teams, onLogin,
                                     const { error } = await supabase.auth.signInWithOAuth({
                                         provider: 'google',
                                         options: {
-                                            redirectTo: window.location.origin
+                                            redirectTo: 'https://clubedocontra.com.br'
                                         }
                                     });
                                     if (error) setError(error.message);

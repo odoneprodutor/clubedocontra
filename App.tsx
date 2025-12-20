@@ -3863,26 +3863,18 @@ const App: React.FC = () => {
           </button>
 
           {/* Menu Items */}
-          <div className={`absolute bottom-full right-0 mb-4 flex flex-col gap-3 transition-all duration-300 origin-bottom-right ${isFabMenuOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-50 translate-y-10 pointer-events-none'}`}>
-            <button onClick={() => { setIsMatchModalOpen(true); setIsFabMenuOpen(false); }} className="flex items-center gap-3 bg-white dark:bg-slate-800 text-slate-800 dark:text-white px-4 py-3 md:px-5 md:py-3 rounded-2xl shadow-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border border-slate-100 dark:border-slate-700 transition btn-feedback whitespace-nowrap min-w-[160px]">
-              <span className="font-bold flex-1 text-right text-sm md:text-base">Criar Jogo</span>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                <Calendar size={18} className="md:w-5 md:h-5" />
-              </div>
+          <div className={`absolute bottom-full right-0 mb-4 flex flex-col gap-3 items-end transition-all duration-300 origin-bottom-right ${isFabMenuOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-50 translate-y-10 pointer-events-none'}`}>
+            <button onClick={() => { setIsFabMenuOpen(false); setEditingMatch(null); setIsMatchModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback whitespace-nowrap">
+              <Calendar size={18} /> Novo Jogo
             </button>
-            {activeTournaments.length > 0 && (
-              <button onClick={() => { setIsTournamentModalOpen(true); setIsFabMenuOpen(false); }} className="flex items-center gap-3 bg-white dark:bg-slate-800 text-slate-800 dark:text-white px-4 py-3 md:px-5 md:py-3 rounded-2xl shadow-xl hover:bg-amber-50 dark:hover:bg-amber-900/20 border border-slate-100 dark:border-slate-700 transition btn-feedback whitespace-nowrap min-w-[160px]">
-                <span className="font-bold flex-1 text-right text-sm md:text-base">Campeonato</span>
-                <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
-                  <TrophyIcon size={18} className="md:w-5 md:h-5" />
-                </div>
-              </button>
-            )}
-            <button onClick={() => { setIsTeamModalOpen(true); setIsFabMenuOpen(false); }} className="flex items-center gap-3 bg-white dark:bg-slate-800 text-slate-800 dark:text-white px-4 py-3 md:px-5 md:py-3 rounded-2xl shadow-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 border border-slate-100 dark:border-slate-700 transition btn-feedback whitespace-nowrap min-w-[160px]">
-              <span className="font-bold flex-1 text-right text-sm md:text-base">Novo Time</span>
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
-                <Shield size={18} className="md:w-5 md:h-5" />
-              </div>
+            <button onClick={() => { setIsFabMenuOpen(false); setEditingTeam(null); setIsTeamModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback whitespace-nowrap">
+              <Users size={18} /> Novo Time
+            </button>
+            <button onClick={() => { setIsFabMenuOpen(false); setIsTournamentModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback whitespace-nowrap">
+              <TrophyIcon size={18} /> Novo Camp.
+            </button>
+            <button onClick={() => { setIsFabMenuOpen(false); setIsArenaModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback whitespace-nowrap">
+              <MapPin size={18} /> Nova Arena
             </button>
           </div>
         </div>
