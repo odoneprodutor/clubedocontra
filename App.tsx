@@ -1184,93 +1184,122 @@ const App: React.FC = () => {
   const applyTacticalPreset = (teamId: string, formation: string) => {
     const team = getTeam(teamId);
     let newPositions: TacticalPosition[] = [];
-    const rosterIds = team.roster.map(p => p.id);
 
-    if (rosterIds.length === 0) return;
+    // Separate GK and Field Players
+    const gks = team.roster.filter(p => p.position === 'GK');
+    const fieldPlayers = team.roster.filter(p => p.position !== 'GK');
 
-    const getPos = (idx: number, x: number, y: number) => {
-      if (idx < rosterIds.length) newPositions.push({ playerId: rosterIds[idx], x, y });
+    // Helper to pull next available player
+    // If we need a GK, try GK list first, then field.
+    // If we need field, try field list first, then GK (if specific rules allowed, here we just use what we have).
+
+    // We maintain a pool of "used" IDs to avoid duplicates if we get fancy, 
+    // but simplifying: just pop from arrays.
+
+    let availableGks = [...gks];
+    let availableField = [...fieldPlayers];
+
+    const assignPlayer = (isGkSlot: boolean): string => {
+      if (isGkSlot) {
+        if (availableGks.length > 0) return availableGks.shift()!.id;
+        // If no GK, return special placeholder
+        return 'placeholder-gk';
+      } else {
+        if (availableField.length > 0) return availableField.shift()!.id;
+        // Fallback: If ran out of field players, use extra GKs?
+        if (availableGks.length > 0) return availableGks.shift()!.id;
+        // No one left
+        return `placeholder-${Date.now()}-${Math.random()}`;
+      }
     };
 
-    // Always GK at (50, 90)
-    getPos(0, 50, 90);
+    const addPos = (x: number, y: number, isGk: boolean) => {
+      const pid = assignPlayer(isGk);
+      newPositions.push({ playerId: pid, x, y });
+    };
+
+    // Always GK at (50, 90) - Slot 0
+    addPos(50, 90, true);
 
     // Soccer & General Large Formations
     if (formation === '4-4-2') {
-      getPos(1, 15, 70); getPos(2, 40, 70); getPos(3, 60, 70); getPos(4, 85, 70);
-      getPos(5, 15, 45); getPos(6, 40, 45); getPos(7, 60, 45); getPos(8, 85, 45);
-      getPos(9, 35, 20); getPos(10, 65, 20);
+      addPos(15, 70, false); addPos(40, 70, false); addPos(60, 70, false); addPos(85, 70, false);
+      addPos(15, 45, false); addPos(40, 45, false); addPos(60, 45, false); addPos(85, 45, false);
+      addPos(35, 20, false); addPos(65, 20, false);
     } else if (formation === '4-3-3') {
-      getPos(1, 15, 70); getPos(2, 40, 70); getPos(3, 60, 70); getPos(4, 85, 70);
-      getPos(5, 50, 50); getPos(6, 30, 40); getPos(7, 70, 40);
-      getPos(8, 15, 20); getPos(9, 50, 20); getPos(10, 85, 20);
+      addPos(15, 70, false); addPos(40, 70, false); addPos(60, 70, false); addPos(85, 70, false);
+      addPos(50, 50, false); addPos(30, 40, false); addPos(70, 40, false);
+      addPos(15, 20, false); addPos(50, 20, false); addPos(85, 20, false);
     } else if (formation === '3-5-2') {
-      getPos(1, 30, 75); getPos(2, 50, 75); getPos(3, 70, 75);
-      getPos(4, 15, 50); getPos(5, 35, 50); getPos(6, 50, 45); getPos(7, 65, 50); getPos(8, 85, 50);
-      getPos(9, 40, 20); getPos(10, 60, 20);
+      addPos(30, 75, false); addPos(50, 75, false); addPos(70, 75, false);
+      addPos(15, 50, false); addPos(35, 50, false); addPos(50, 45, false); addPos(65, 50, false); addPos(85, 50, false);
+      addPos(40, 20, false); addPos(60, 20, false);
     } else if (formation === '4-2-3-1') {
-      getPos(1, 15, 75); getPos(2, 40, 75); getPos(3, 60, 75); getPos(4, 85, 75);
-      getPos(5, 35, 60); getPos(6, 65, 60);
-      getPos(7, 15, 35); getPos(8, 50, 35); getPos(9, 85, 35);
-      getPos(10, 50, 15);
+      addPos(15, 75, false); addPos(40, 75, false); addPos(60, 75, false); addPos(85, 75, false);
+      addPos(35, 60, false); addPos(65, 60, false);
+      addPos(15, 35, false); addPos(50, 35, false); addPos(85, 35, false);
+      addPos(50, 15, false);
     }
 
-    // FUTSAL (5v5)
+    // FUTSAL (5v5) - 4 Field + 1 GK
     else if (formation === '1-2-1') {
-      getPos(1, 50, 75); // Fixo
-      getPos(2, 20, 50); // Ala Esq
-      getPos(3, 80, 50); // Ala Dir
-      getPos(4, 50, 25); // Pivô
+      addPos(50, 75, false); // Fixo
+      addPos(20, 50, false); // Ala Esq
+      addPos(80, 50, false); // Ala Dir
+      addPos(50, 25, false); // Pivô
     } else if (formation === '2-2') {
-      getPos(1, 30, 70); getPos(2, 70, 70);
-      getPos(3, 30, 30); getPos(4, 70, 30);
+      addPos(30, 70, false); addPos(70, 70, false);
+      addPos(30, 30, false); addPos(70, 30, false);
     } else if (formation === '3-1') {
-      getPos(1, 20, 70); getPos(2, 50, 70); getPos(3, 80, 70);
-      getPos(4, 50, 30);
+      addPos(20, 70, false); addPos(50, 70, false); addPos(80, 70, false);
+      addPos(50, 30, false);
     }
 
-    // FUT7 (7v7)
+    // FUT7 (7v7) - 6 Field + 1 GK
     else if (formation === '2-3-1') {
-      getPos(1, 30, 75); getPos(2, 70, 75);
-      getPos(3, 15, 50); getPos(4, 50, 50); getPos(5, 85, 50);
-      getPos(6, 50, 25);
+      addPos(30, 75, false); addPos(70, 75, false);
+      addPos(15, 50, false); addPos(50, 50, false); addPos(85, 50, false);
+      addPos(50, 25, false);
     } else if (formation === '3-2-1') {
-      getPos(1, 15, 75); getPos(2, 50, 75); getPos(3, 85, 75);
-      getPos(4, 30, 45); getPos(5, 70, 45);
-      getPos(6, 50, 20);
+      addPos(15, 75, false); addPos(50, 75, false); addPos(85, 75, false);
+      addPos(30, 45, false); addPos(70, 45, false);
+      addPos(50, 20, false);
     } else if (formation === '3-3') {
-      getPos(1, 20, 75); getPos(2, 50, 75); getPos(3, 80, 75);
-      getPos(4, 20, 35); getPos(5, 50, 35); getPos(6, 80, 35);
+      addPos(20, 75, false); addPos(50, 75, false); addPos(80, 75, false);
+      addPos(20, 35, false); addPos(50, 35, false); addPos(80, 35, false);
+    } else if (formation === '4-2') {
+      addPos(15, 75, false); addPos(40, 75, false); addPos(60, 75, false); addPos(85, 75, false);
+      addPos(30, 35, false); addPos(70, 35, false);
     }
 
-    // FUT6 (6v6)
+    // FUT6 (6v6) - 5 Field + 1 GK
     else if (formation === '2-2-1') {
-      getPos(1, 30, 75); getPos(2, 70, 75);
-      getPos(3, 30, 45); getPos(4, 70, 45);
-      getPos(5, 50, 20);
+      addPos(30, 75, false); addPos(70, 75, false);
+      addPos(30, 45, false); addPos(70, 45, false);
+      addPos(50, 20, false);
     } else if (formation === '3-1-1') {
-      getPos(1, 15, 75); getPos(2, 50, 75); getPos(3, 85, 75);
-      getPos(4, 50, 45);
-      getPos(5, 50, 20);
+      addPos(15, 75, false); addPos(50, 75, false); addPos(85, 75, false);
+      addPos(50, 45, false);
+      addPos(50, 20, false);
     } else if (formation === '2-1-2') {
-      getPos(1, 30, 75); getPos(2, 70, 75);
-      getPos(3, 50, 50);
-      getPos(4, 30, 25); getPos(5, 70, 25);
+      addPos(30, 75, false); addPos(70, 75, false);
+      addPos(50, 50, false);
+      addPos(30, 25, false); addPos(70, 25, false);
     }
 
-    // FUT8 (8v8)
+    // FUT8 (8v8) - 7 Field + 1 GK
     else if (formation === '3-3-1') {
-      getPos(1, 20, 75); getPos(2, 50, 75); getPos(3, 80, 75);
-      getPos(4, 20, 45); getPos(5, 50, 45); getPos(6, 80, 45);
-      getPos(7, 50, 20);
+      addPos(20, 75, false); addPos(50, 75, false); addPos(80, 75, false);
+      addPos(20, 45, false); addPos(50, 45, false); addPos(80, 45, false);
+      addPos(50, 20, false);
     } else if (formation === '3-2-2') {
-      getPos(1, 20, 75); getPos(2, 50, 75); getPos(3, 80, 75);
-      getPos(4, 35, 45); getPos(5, 65, 45);
-      getPos(6, 35, 20); getPos(7, 65, 20);
+      addPos(20, 75, false); addPos(50, 75, false); addPos(80, 75, false);
+      addPos(35, 45, false); addPos(65, 45, false);
+      addPos(35, 20, false); addPos(65, 20, false);
     } else if (formation === '2-4-1') {
-      getPos(1, 35, 75); getPos(2, 65, 75);
-      getPos(3, 10, 50); getPos(4, 35, 50); getPos(5, 65, 50); getPos(6, 90, 50);
-      getPos(7, 50, 20);
+      addPos(35, 75, false); addPos(65, 75, false);
+      addPos(10, 50, false); addPos(35, 50, false); addPos(65, 50, false); addPos(90, 50, false);
+      addPos(50, 20, false);
     }
 
     handleSaveTeamTactics(teamId, newPositions);

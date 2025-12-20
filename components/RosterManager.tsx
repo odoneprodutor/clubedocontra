@@ -331,19 +331,28 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
                             </h3>
                         </div>
 
-                        {/* Formation Presets - Horizontal Scroll */}
+
                         <div className="flex bg-slate-100 dark:bg-slate-900 p-1 rounded-xl gap-1 overflow-x-auto custom-scrollbar no-scrollbar">
                             {(function () {
                                 const formations: Record<string, string[]> = {
-                                    'FUTSAL': ['1-2-1', '2-2', '3-1', 'GK-PLAY'],
+                                    'FUTSAL': ['1-2-1', '2-2', '3-1'],
                                     'FUT6': ['2-2-1', '3-1-1', '2-1-2'],
-                                    'FUT7': ['2-3-1', '3-2-1', '3-3', '4-2', '4-1-1'],
+                                    'FUT7': ['2-3-1', '3-2-1', '3-3', '4-2'],
                                     'FUT8': ['3-3-1', '3-2-2', '2-4-1'],
-                                    'AMATEUR': ['4-4-2', '4-3-3', '3-5-2', '5-3-2', '4-2-3-1'],
-                                    'PROFESSIONAL': ['4-4-2', '4-3-3', '3-5-2', '5-3-2', '4-2-3-1']
+                                    'AMATEUR': ['4-4-2', '4-3-3', '3-5-2', '4-2-3-1'],
+                                    'PROFESSIONAL': ['4-4-2', '4-3-3', '3-5-2', '4-2-3-1']
                                 };
                                 const type = team.sportType || 'FUT7';
                                 const availableFormations = formations[type] || ['4-4-2', '4-3-3'];
+
+                                // Auto-apply default formation if empty and editable
+                                React.useEffect(() => {
+                                    if (isEditable && (!team.tacticalFormation || team.tacticalFormation.length === 0) && availableFormations.length > 0) {
+                                        // Apply the first available formation (usually the most standard)
+                                        // specific check to avoid infinite loop or overrides if user just cleared it intentionally (though clear isn't an option yet)
+                                        onApplyFormation(availableFormations[0]);
+                                    }
+                                }, [team.id]); // Run once per team load
 
                                 return availableFormations.map(form => (
                                     <button
