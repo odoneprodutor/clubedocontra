@@ -126,10 +126,10 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
                                     <tr>
                                         <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400">Atleta</th>
                                         <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400">Número</th>
-                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400">Posição</th>
-                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400">Status</th>
-                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400">Estatísticas</th>
-                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400">Avaliação</th>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400 hidden sm:table-cell">Posição</th>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400 hidden md:table-cell">Status</th>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400 hidden lg:table-cell">Estatísticas</th>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400 hidden xl:table-cell">Avaliação</th>
                                         <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400 text-right">Ações</th>
                                     </tr>
                                 </thead>
@@ -190,7 +190,7 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
                                                 </td>
 
                                                 {/* Posição */}
-                                                <td className="px-6 py-4">
+                                                <td className="px-6 py-4 hidden sm:table-cell">
                                                     {isEditing ? (
                                                         <select
                                                             value={editData.position}
@@ -222,7 +222,7 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
                                                 </td>
 
                                                 {/* Status Médico */}
-                                                <td className="px-6 py-4">
+                                                <td className="px-6 py-4 hidden md:table-cell">
                                                     <button
                                                         onClick={() => isEditable && toggleInjury(p)}
                                                         disabled={!isEditable}
@@ -240,7 +240,7 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
                                                 </td>
 
                                                 {/* Estatísticas */}
-                                                <td className="px-6 py-4">
+                                                <td className="px-6 py-4 hidden lg:table-cell">
                                                     <div className="flex gap-3 text-xs">
                                                         <div className="flex flex-col">
                                                             <span className="text-slate-400 text-[9px] uppercase font-bold">Gols</span>
@@ -252,9 +252,8 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
                                                         </div>
                                                     </div>
                                                 </td>
-
                                                 {/* Avaliação */}
-                                                <td className="px-6 py-4">
+                                                <td className="px-6 py-4 hidden xl:table-cell">
                                                     <div className="flex items-center gap-2">
                                                         <div className="flex items-center text-amber-500">
                                                             <Star size={14} fill={Number(avgRating) > 0 ? "currentColor" : "none"} />
@@ -320,10 +319,10 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
                             </div>
                         )}
                     </div>
-                </div>
+                </div >
 
                 {/* Tactics Board Column */}
-                <div className="lg:col-span-1">
+                < div className="lg:col-span-1" >
                     <div className="glass-panel rounded-3xl p-6 interactive-card flex flex-col gap-4 border border-slate-100 dark:border-slate-800 h-full">
                         <div className="flex justify-between items-center">
                             <h3 className="font-bold text-lg flex items-center gap-2 text-slate-800 dark:text-white">
@@ -350,7 +349,7 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
                                     if (isEditable && (!team.tacticalFormation || team.tacticalFormation.length === 0) && availableFormations.length > 0) {
                                         // Apply the first available formation (usually the most standard)
                                         // specific check to avoid infinite loop or overrides if user just cleared it intentionally (though clear isn't an option yet)
-                                        onApplyFormation(availableFormations[0]);
+                                        onApplyFormation(availableFormations[0], true);
                                     }
                                 }, [team.id]); // Run once per team load
 
@@ -373,9 +372,9 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
                             onSave={onSaveTactics}
                         />
                     </div>
-                </div>
-            </div>
-        </div>
+                </div >
+            </div >
+        </div >
     );
 };
 

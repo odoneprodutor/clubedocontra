@@ -1135,9 +1135,9 @@ const App: React.FC = () => {
     alert("Tática salva para esta partida!");
   };
 
-  const handleSaveTeamTactics = (teamId: string, newPositions: TacticalPosition[]) => {
+  const handleSaveTeamTactics = (teamId: string, newPositions: TacticalPosition[], silent: boolean = false) => {
     setTeams(prev => prev.map(t => t.id === teamId ? { ...t, tacticalFormation: newPositions } : t));
-    alert("Formação padrão atualizada!");
+    if (!silent) alert("Formação padrão atualizada!");
   };
 
   const handleRemovePlayer = async (teamId: string, playerId: string) => {
@@ -1181,7 +1181,7 @@ const App: React.FC = () => {
     }
   };
 
-  const applyTacticalPreset = (teamId: string, formation: string) => {
+  const applyTacticalPreset = (teamId: string, formation: string, silent: boolean = false) => {
     const team = getTeam(teamId);
     let newPositions: TacticalPosition[] = [];
 
@@ -1302,7 +1302,7 @@ const App: React.FC = () => {
       addPos(50, 20, false);
     }
 
-    handleSaveTeamTactics(teamId, newPositions);
+    handleSaveTeamTactics(teamId, newPositions, silent);
   };
 
   // TEAM CRUD (Simplified for Director)
@@ -2950,23 +2950,59 @@ const App: React.FC = () => {
                   </button>
                 </div>
                 {myTeam.roster.length > 0 ? (
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                    {myTeam.roster.map(p => (
-                      <div key={p.id} onClick={() => setSelectedPlayerForProfile({ player: p, teamName: myTeam.name })} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-emerald-300 hover:bg-emerald-50/50 cursor-pointer transition group btn-feedback">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-mono font-bold text-slate-400 text-sm group-hover:bg-emerald-200 group-hover:text-emerald-800 transition overflow-hidden">
-                            {(function () {
-                              const avatar = (p.userId === currentUser.id ? currentUser.avatar : null) || (p as any).avatar || (p as any).profilePicture;
-                              return avatar ? <img src={avatar} alt={p.name} className="w-full h-full object-cover" /> : p.number;
-                            })()}
+                  <div className="grid grid-cols-1 gap-3 max-h-[450px] overflow-y-auto pr-2 custom-scrollbar p-1">
+                    {myTeam.roster.map(p => {
+                      // Robust Avatar Logic: Try to find the user in the global list first
+                      const userAccount = userAccounts.find(u => u.id === p.userId);
+                      const avatar = userAccount?.avatar || (p.userId === currentUser?.id ? currentUser.avatar : null) || (p as any).avatar || (p as any).profilePicture;
+
+                      return (
+                        <div
+                          key={p.id}
+                          onClick={() => setSelectedPlayerForProfile({ player: p, teamName: myTeam.name })}
+                          className="relative flex items-center gap-4 p-4 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-100 dark:border-white/5 hover:border-emerald-500/30 dark:hover:border-emerald-500/30 hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:shadow-lg dark:hover:shadow-emerald-900/10 cursor-pointer transition-all duration-300 group overflow-hidden"
+                        >
+                          {/* Hover Gradient Background Effect */}
+                          <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/0 to-emerald-500/0 group-hover:from-emerald-500/5 group-hover:via-emerald-500/5 group-hover:to-emerald-500/5 transition-all duration-500" />
+
+                          {/* Avatar Container - Preserving Aspect Ratio */}
+                          <div className="relative z-10 shrink-0">
+                            <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-700 p-0.5 shadow-sm group-hover:scale-105 transition-transform duration-300 border border-slate-200 dark:border-slate-600 group-hover:border-emerald-400 dark:group-hover:border-emerald-500 overflow-hidden">
+                              {avatar ? (
+                                <img src={avatar} alt={p.name} className="w-full h-full rounded-full object-cover aspect-square" />
+                              ) : (
+                                <div className="w-full h-full rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center text-slate-400 dark:text-slate-300">
+                                  <User size={24} />
+                                </div>
+                              )}
+                            </div>
+                            {/* Number Badge */}
+                            <div className="absolute -bottom-1 -right-1 bg-slate-900 text-white text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-full border-2 border-white dark:border-slate-800 shadow-md transform group-hover:scale-110 transition-transform z-20">
+                              {p.number}
+                            </div>
                           </div>
-                          <div>
-                            <div className="font-bold text-slate-800 text-sm group-hover:text-emerald-700">{p.name}</div>
-                            <div className="text-[10px] text-slate-600 uppercase font-bold tracking-wider">{p.position}</div>
+
+                          {/* Info */}
+                          <div className="flex-1 min-w-0 relative z-10 flex flex-col justify-center">
+                            <div className="flex justify-between items-start">
+                              <h4 className="font-bold text-slate-800 dark:text-white text-base truncate pr-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                                {p.name}
+                              </h4>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/50 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-600/50 group-hover:border-emerald-200 dark:group-hover:border-emerald-800 transition-colors">
+                                {p.position}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Action Arrow */}
+                          <div className="relative z-10 text-slate-300 dark:text-slate-600 group-hover:text-emerald-500 transition-all duration-300 transform translate-x-4 opacity-0 group-hover:translate-x-0 group-hover:opacity-100">
+                            <ChevronRight size={20} />
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-sm text-slate-400">Nenhum jogador no elenco.</div>
@@ -3698,8 +3734,8 @@ const App: React.FC = () => {
 
               </div>
 
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 md:gap-4">
+                <div className="flex items-center gap-2 md:gap-3">
                   {/* Notification Bell */}
                   <div className="relative" ref={notificationRef}>
                     <button onClick={() => setIsNotificationsOpen(!isNotificationsOpen)} className="text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white p-2 rounded-full hover:bg-slate-900/5 dark:hover:bg-white/10 transition relative btn-feedback">
@@ -3738,7 +3774,7 @@ const App: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="flex items-center gap-3 cursor-pointer p-1.5 pl-2 pr-4 rounded-full bg-slate-900/5 dark:bg-white/5 border border-slate-900/10 dark:border-white/10 hover:bg-slate-900/10 dark:hover:bg-white/10 transition btn-feedback" onClick={() => setViewingProfileId(currentUser.id)}>
+                  <div className="flex items-center gap-2 md:gap-3 cursor-pointer p-1.5 pl-2 pr-2 md:pr-4 rounded-full bg-slate-900/5 dark:bg-white/5 border border-slate-900/10 dark:border-white/10 hover:bg-slate-900/10 dark:hover:bg-white/10 transition btn-feedback max-w-[150px] md:max-w-none" onClick={() => setViewingProfileId(currentUser.id)}>
                     <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white font-bold text-sm border-2 border-white/20 shadow-md overflow-hidden">
                       {currentUser.avatar ? <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" /> : currentUser.name.charAt(0)}
                     </div>
@@ -3816,64 +3852,78 @@ const App: React.FC = () => {
 
       {/* --- Floating Action Button (Director) --- */}
       {canManage && !isMatchModalOpen && !isTournamentModalOpen && !selectedMatchId && !selectedTournamentId && currentUser && (
-        <div className="fixed bottom-24 md:bottom-8 right-6 z-30 flex flex-col items-end gap-3">
-          {isFabMenuOpen && (
-            <div className="flex flex-col gap-3 items-end animate-in slide-in-from-bottom-10 duration-300 mb-2">
-              <button onClick={() => { setIsFabMenuOpen(false); setEditingMatch(null); setIsMatchModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback">
-                <Calendar size={18} /> Novo Jogo
-              </button>
-              <button onClick={() => { setIsFabMenuOpen(false); setEditingTeam(null); setIsTeamModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback">
-                <Users size={18} /> Novo Time
-              </button>
-              <button onClick={() => { setIsFabMenuOpen(false); setIsTournamentModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback">
-                <TrophyIcon size={18} /> Novo Camp.
-              </button>
-              <button onClick={() => { setIsFabMenuOpen(false); setIsArenaModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback">
-                <MapPin size={18} /> Nova Arena
-              </button>
-            </div>
-          )}
-
+        <div className={`fixed z-40 transition-all duration-300 ${isFabMenuOpen ? 'bottom-[90px] right-4' : 'bottom-[80px] right-4 md:bottom-10 md:right-10'}`}>
+          {/* Main Button */}
           <button
             onClick={() => setIsFabMenuOpen(!isFabMenuOpen)}
-            className={`w-14 h-14 rounded-full flex items-center justify-center text-white shadow-xl hover:scale-105 transition duration-300 btn-feedback ${isFabMenuOpen ? 'bg-slate-700 rotate-45' : 'bg-gradient-to-r from-emerald-500 to-teal-600'}`}
+            className={`w-14 h-14 md:w-16 md:h-16 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 btn-feedback ${isFabMenuOpen ? 'bg-slate-800 text-white rotate-45 scale-90' : 'bg-emerald-500 hover:bg-emerald-400 text-white hover:scale-105'
+              }`}
           >
-            <Plus size={28} />
+            <Plus size={28} className="md:w-8 md:h-8" />
           </button>
+
+          {/* Menu Items */}
+          <div className={`absolute bottom-full right-0 mb-4 flex flex-col gap-3 transition-all duration-300 origin-bottom-right ${isFabMenuOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-50 translate-y-10 pointer-events-none'}`}>
+            <button onClick={() => { setIsMatchModalOpen(true); setIsFabMenuOpen(false); }} className="flex items-center gap-3 bg-white dark:bg-slate-800 text-slate-800 dark:text-white px-4 py-3 md:px-5 md:py-3 rounded-2xl shadow-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border border-slate-100 dark:border-slate-700 transition btn-feedback whitespace-nowrap min-w-[160px]">
+              <span className="font-bold flex-1 text-right text-sm md:text-base">Criar Jogo</span>
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
+                <Calendar size={18} className="md:w-5 md:h-5" />
+              </div>
+            </button>
+            {activeTournaments.length > 0 && (
+              <button onClick={() => { setIsTournamentModalOpen(true); setIsFabMenuOpen(false); }} className="flex items-center gap-3 bg-white dark:bg-slate-800 text-slate-800 dark:text-white px-4 py-3 md:px-5 md:py-3 rounded-2xl shadow-xl hover:bg-amber-50 dark:hover:bg-amber-900/20 border border-slate-100 dark:border-slate-700 transition btn-feedback whitespace-nowrap min-w-[160px]">
+                <span className="font-bold flex-1 text-right text-sm md:text-base">Campeonato</span>
+                <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center">
+                  <TrophyIcon size={18} className="md:w-5 md:h-5" />
+                </div>
+              </button>
+            )}
+            <button onClick={() => { setIsTeamModalOpen(true); setIsFabMenuOpen(false); }} className="flex items-center gap-3 bg-white dark:bg-slate-800 text-slate-800 dark:text-white px-4 py-3 md:px-5 md:py-3 rounded-2xl shadow-xl hover:bg-blue-50 dark:hover:bg-blue-900/20 border border-slate-100 dark:border-slate-700 transition btn-feedback whitespace-nowrap min-w-[160px]">
+              <span className="font-bold flex-1 text-right text-sm md:text-base">Novo Time</span>
+              <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center">
+                <Shield size={18} className="md:w-5 md:h-5" />
+              </div>
+            </button>
+          </div>
         </div>
-      )}
+      )
+      }
+
+      {/* --- MODALS --- */}
 
       {/* MATCH DETAIL VIEW OVERLAY */}
-      {selectedMatchId && !isMatchModalOpen && (
-        (() => {
-          const m = matches.find(x => x.id === selectedMatchId);
-          if (!m) return null;
-          const hTeam = getTeam(m.homeTeamId);
-          const aTeam = getTeam(m.awayTeamId);
-          const arena = getArena(m.arenaId);
+      {
+        selectedMatchId && !isMatchModalOpen && (
+          (() => {
+            const m = matches.find(x => x.id === selectedMatchId);
+            if (!m) return null;
+            const hTeam = getTeam(m.homeTeamId);
+            const aTeam = getTeam(m.awayTeamId);
+            const arena = getArena(m.arenaId);
 
-          return (
-            <MatchDetailView
-              match={m}
-              homeTeam={hTeam}
-              awayTeam={aTeam}
-              arena={arena}
-              currentUser={currentUser!}
-              onClose={() => setSelectedMatchId(null)}
-              onAddEvent={handleAddEvent}
-              onViewPlayer={(p) => { if (p.userId) setViewingProfileId(p.userId); }}
-              onSendMessage={handleSendMessage}
-              onSaveMatchTactics={handleSaveMatchTactics}
-              onAddMedia={handleAddMatchMedia}
-              onFinishMatch={handleFinishMatch}
-              onUpdateStreams={handleUpdateStreams}
-              onStartBroadcast={() => handleStartBroadcast(m.id)}
-              onUpdateStatus={(id, status) => handleUpdateScore(id, m.homeScore, m.awayScore, status)}
-              onPostNews={handlePostGeneratedNews}
-            />
-          );
-        })()
-      )}
+            return (
+              <MatchDetailView
+                match={m}
+                homeTeam={hTeam}
+                awayTeam={aTeam}
+                arena={arena}
+                currentUser={currentUser!}
+                onClose={() => setSelectedMatchId(null)}
+                onAddEvent={handleAddEvent}
+                onViewPlayer={(p) => { if (p.userId) setViewingProfileId(p.userId); }}
+                onSendMessage={handleSendMessage}
+                onSaveMatchTactics={handleSaveMatchTactics}
+                onAddMedia={handleAddMatchMedia}
+                onFinishMatch={handleFinishMatch}
+                onUpdateStreams={handleUpdateStreams}
+                onStartBroadcast={() => handleStartBroadcast(m.id)}
+                onUpdateStatus={(id, status) => handleUpdateScore(id, m.homeScore, m.awayScore, status)}
+                onPostNews={handlePostGeneratedNews}
+              />
+            );
+          })()
+        )
+      }
 
       {/* GLOBAL BROADCASTER OVERLAY (Persistent through navigation) */}
       {/* Agora Broadcaster Removed - Feature Disabled temporarily */}
@@ -3881,168 +3931,172 @@ const App: React.FC = () => {
       {/* --- MODALS --- */}
 
       {/* 1. MATCH MODAL */}
-      {isMatchModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="glass-panel text-slate-900 mx-auto w-full max-w-lg rounded-3xl p-8 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-black">{editingMatch ? 'Editar Jogo' : 'Novo Jogo'}</h2>
-              <button onClick={() => setIsMatchModalOpen(false)}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
+      {
+        isMatchModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+            <div className="glass-panel text-slate-900 mx-auto w-full max-w-lg rounded-3xl p-8 max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-black">{editingMatch ? 'Editar Jogo' : 'Novo Jogo'}</h2>
+                <button onClick={() => setIsMatchModalOpen(false)}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
+              </div>
+              <form onSubmit={handleSaveMatch} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mandante</label>
+                    <select
+                      name="homeTeamId"
+                      defaultValue={editingMatch?.homeTeamId}
+                      className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200"
+                      required
+                      onChange={(e) => {
+                        // Force re-render to update away team filter
+                        setEditingMatch(prev => ({ ...(prev || {} as any), homeTeamId: e.target.value }));
+                      }}
+                    >
+                      <option value="" disabled selected={!editingMatch}>Selecione...</option>
+                      {activeTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Visitante</label>
+                    <select name="awayTeamId" defaultValue={editingMatch?.awayTeamId} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required>
+                      <option value="" disabled selected={!editingMatch}>Selecione...</option>
+                      {activeTeams
+                        .filter(t => t.id !== (editingMatch?.homeTeamId || (document.querySelector('[name="homeTeamId"]') as HTMLSelectElement)?.value))
+                        .map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data e Hora</label>
+                    <input type="datetime-local" name="date" defaultValue={editingMatch?.date} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Arena</label>
+                    <select name="arenaId" defaultValue={editingMatch?.arenaId} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required>
+                      {arenas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <input type="hidden" name="type" value="FRIENDLY" />
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Esporte</label>
+                    <select name="sportType" defaultValue={editingMatch?.sportType || 'FUT7'} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      {Object.entries(SPORT_TYPE_DETAILS).map(([key, val]) => (
+                        <option key={key} value={key}>{val.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rodada</label>
+                    <input type="text" name="round" defaultValue={editingMatch?.round || '1'} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" placeholder="Ex: 1" />
+                  </div>
+                </div>
+
+                {/* Tournament Select Removed */}
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Vídeo Youtube (Link)</label>
+                  <input type="url" name="youtubeUrl" defaultValue={editingMatch?.youtubeVideoId ? `https://youtube.com/watch?v=${editingMatch.youtubeVideoId}` : ''} placeholder="https://..." className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fotos do Jogo</label>
+                  <input type="file" name="media" multiple accept="image/*" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  {editingMatch && (
+                    <button type="button" onClick={() => openDeleteModal(editingMatch.id, 'MATCH')} className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl hover:bg-red-100 transition">Excluir</button>
+                  )}
+                  <button type="submit" className="flex-[2] bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200">Salvar Jogo</button>
+                </div>
+              </form>
             </div>
-            <form onSubmit={handleSaveMatch} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mandante</label>
-                  <select
-                    name="homeTeamId"
-                    defaultValue={editingMatch?.homeTeamId}
-                    className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200"
-                    required
-                    onChange={(e) => {
-                      // Force re-render to update away team filter
-                      setEditingMatch(prev => ({ ...(prev || {} as any), homeTeamId: e.target.value }));
-                    }}
-                  >
-                    <option value="" disabled selected={!editingMatch}>Selecione...</option>
-                    {activeTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Visitante</label>
-                  <select name="awayTeamId" defaultValue={editingMatch?.awayTeamId} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required>
-                    <option value="" disabled selected={!editingMatch}>Selecione...</option>
-                    {activeTeams
-                      .filter(t => t.id !== (editingMatch?.homeTeamId || (document.querySelector('[name="homeTeamId"]') as HTMLSelectElement)?.value))
-                      .map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                </div>
-              </div>
+          </div>
+        )
+      }
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data e Hora</label>
-                  <input type="datetime-local" name="date" defaultValue={editingMatch?.date} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Arena</label>
-                  <select name="arenaId" defaultValue={editingMatch?.arenaId} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required>
-                    {arenas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                  </select>
-                </div>
+      {/* 2. TEAM MODAL */}
+      {
+        isTeamModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+            <div className="glass-panel text-slate-900 mx-auto w-full max-w-md rounded-3xl p-8">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-black">{editingTeam ? 'Editar Time' : 'Criar Novo Time'}</h2>
+                <button onClick={() => { setIsTeamModalOpen(false); setEditingTeam(null); }}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <input type="hidden" name="type" value="FRIENDLY" />
+              <form onSubmit={editingTeam ? handleUpdateTeam : handleCreateTeam} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Esporte</label>
-                  <select name="sportType" defaultValue={editingMatch?.sportType || 'FUT7'} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Time</label>
+                  <input type="text" name="teamName" defaultValue={editingTeam?.name} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="Ex: Rocket FC" />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Sigla (3 letras)</label>
+                    <input type="text" name="shortName" defaultValue={editingTeam?.shortName} maxLength={3} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 uppercase" required placeholder="ROC" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cidade Sede</label>
+                    <CitySelect name="city" value={editingTeam?.city} onChange={() => { }} required />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Modalidade Principal</label>
+                  <select name="sportType" defaultValue={editingTeam?.sportType || 'FUT7'} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
                     {Object.entries(SPORT_TYPE_DETAILS).map(([key, val]) => (
                       <option key={key} value={key}>{val.label}</option>
                     ))}
                   </select>
                 </div>
+
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rodada</label>
-                  <input type="text" name="round" defaultValue={editingMatch?.round || '1'} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" placeholder="Ex: 1" />
-                </div>
-              </div>
-
-              {/* Tournament Select Removed */}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Vídeo Youtube (Link)</label>
-                <input type="url" name="youtubeUrl" defaultValue={editingMatch?.youtubeVideoId ? `https://youtube.com/watch?v=${editingMatch.youtubeVideoId}` : ''} placeholder="https://..." className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fotos do Jogo</label>
-                <input type="file" name="media" multiple accept="image/*" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                {editingMatch && (
-                  <button type="button" onClick={() => openDeleteModal(editingMatch.id, 'MATCH')} className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl hover:bg-red-100 transition">Excluir</button>
-                )}
-                <button type="submit" className="flex-[2] bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200">Salvar Jogo</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* 2. TEAM MODAL */}
-      {isTeamModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="glass-panel text-slate-900 mx-auto w-full max-w-md rounded-3xl p-8">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-black">{editingTeam ? 'Editar Time' : 'Criar Novo Time'}</h2>
-              <button onClick={() => { setIsTeamModalOpen(false); setEditingTeam(null); }}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
-            </div>
-            <form onSubmit={editingTeam ? handleUpdateTeam : handleCreateTeam} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Time</label>
-                <input type="text" name="teamName" defaultValue={editingTeam?.name} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="Ex: Rocket FC" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Sigla (3 letras)</label>
-                  <input type="text" name="shortName" defaultValue={editingTeam?.shortName} maxLength={3} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 uppercase" required placeholder="ROC" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cidade Sede</label>
-                  <CitySelect name="city" value={editingTeam?.city} onChange={() => { }} required />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Modalidade Principal</label>
-                <select name="sportType" defaultValue={editingTeam?.sportType || 'FUT7'} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  {Object.entries(SPORT_TYPE_DETAILS).map(([key, val]) => (
-                    <option key={key} value={key}>{val.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cores do Time</label>
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <span className="text-[10px] text-slate-400">Primária*</span>
-                    <input type="color" name="primaryColor" defaultValue={editingTeam?.primaryColor || editingTeam?.logoColor || '#10b981'} className="w-full h-10 rounded cursor-pointer" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400">Secundária*</span>
-                    <input type="color" name="secondaryColor" defaultValue={editingTeam?.secondaryColor || '#0f172a'} className="w-full h-10 rounded cursor-pointer" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400">Terciária</span>
-                    <input type="color" name="tertiaryColor" defaultValue={editingTeam?.tertiaryColor || ''} className="w-full h-10 rounded cursor-pointer" />
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cores do Time</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <span className="text-[10px] text-slate-400">Primária*</span>
+                      <input type="color" name="primaryColor" defaultValue={editingTeam?.primaryColor || editingTeam?.logoColor || '#10b981'} className="w-full h-10 rounded cursor-pointer" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400">Secundária*</span>
+                      <input type="color" name="secondaryColor" defaultValue={editingTeam?.secondaryColor || '#0f172a'} className="w-full h-10 rounded cursor-pointer" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-slate-400">Terciária</span>
+                      <input type="color" name="tertiaryColor" defaultValue={editingTeam?.tertiaryColor || ''} className="w-full h-10 rounded cursor-pointer" />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Escudo (Avatar)</label>
-                  <input type="file" name="profilePicture" accept="image/*" className="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Escudo (Avatar)</label>
+                    <input type="file" name="profilePicture" accept="image/*" className="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Capa (Banner)</label>
+                    <input type="file" name="cover" accept="image/*" className="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Capa (Banner)</label>
-                  <input type="file" name="cover" accept="image/*" className="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
-                </div>
-              </div>
 
-              <div className="flex gap-2 mt-4">
-                {editingTeam && (
-                  <button type="button" onClick={() => openDeleteModal(editingTeam.id, 'TEAM')} className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl hover:bg-red-100 transition">Excluir</button>
-                )}
-                <button type="submit" className="flex-[2] bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200">
-                  {editingTeam ? 'Atualizar' : 'Criar Time'}
-                </button>
-              </div>
-            </form>
+                <div className="flex gap-2 mt-4">
+                  {editingTeam && (
+                    <button type="button" onClick={() => openDeleteModal(editingTeam.id, 'TEAM')} className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl hover:bg-red-100 transition">Excluir</button>
+                  )}
+                  <button type="submit" className="flex-[2] bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200">
+                    {editingTeam ? 'Atualizar' : 'Criar Time'}
+                  </button>
+                </div>
+              </form>
+            </div >
           </div >
-        </div >
-      )}
+        )
+      }
 
 
 
@@ -4199,6 +4253,7 @@ const App: React.FC = () => {
               onResetEvaluations={handleResetEvaluations}
               onSaveTrophy={handleSaveTrophy}
               onDeleteTrophy={handleDeleteTrophy}
+              onLogout={handleLogout}
             />
           </div>
         )
@@ -4263,77 +4318,79 @@ const App: React.FC = () => {
       }
 
       {/* GLOBAL NEWS MODAL */}
-      {selectedNewsItem && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
-          <div className="bg-white dark:bg-slate-900 mx-auto w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto relative animate-in zoom-in-95">
-            {/* Header - No Image, just Gradient */}
-            <div className="h-48 relative bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col justify-end p-6">
-              <button
-                onClick={() => setSelectedNewsItem(null)}
-                className="absolute top-4 right-4 bg-white/10 backdrop-blur text-white p-2 rounded-full hover:bg-white/20 transition"
-              >
-                <X size={24} />
-              </button>
-              <div>
-                <span className="bg-emerald-500 text-white text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide mb-3 inline-block shadow-md">{selectedNewsItem.category}</span>
-                <h2 className="text-2xl md:text-3xl font-black text-white leading-tight drop-shadow-md">{selectedNewsItem.title}</h2>
-              </div>
-            </div>
-
-            {/* Content Body */}
-            <div className="p-8 space-y-6">
-              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
-                    <User size={16} className="text-slate-500 dark:text-slate-400" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-900 dark:text-white">{selectedNewsItem.author || 'Redação LocalLegends'}</div>
-                    <div className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(selectedNewsItem.date).toLocaleDateString('pt-BR')} • Leitura de 2 min</div>
-                  </div>
+      {
+        selectedNewsItem && (
+          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+            <div className="bg-white dark:bg-slate-900 mx-auto w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto relative animate-in zoom-in-95">
+              {/* Header - No Image, just Gradient */}
+              <div className="h-48 relative bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col justify-end p-6">
+                <button
+                  onClick={() => setSelectedNewsItem(null)}
+                  className="absolute top-4 right-4 bg-white/10 backdrop-blur text-white p-2 rounded-full hover:bg-white/20 transition"
+                >
+                  <X size={24} />
+                </button>
+                <div>
+                  <span className="bg-emerald-500 text-white text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide mb-3 inline-block shadow-md">{selectedNewsItem.category}</span>
+                  <h2 className="text-2xl md:text-3xl font-black text-white leading-tight drop-shadow-md">{selectedNewsItem.title}</h2>
                 </div>
               </div>
 
-              {/* Main Text */}
-              <div className="prose dark:prose-invert prose-emerald max-w-none">
-                <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-300 leading-relaxed text-lg">
-                  {selectedNewsItem.content || selectedNewsItem.excerpt}
-                </p>
-              </div>
-
-              {/* External Link / Stream */}
-              {selectedNewsItem.externalLink && (
-                <div className="my-6">
-                  <a href={selectedNewsItem.externalLink} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-3 w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-red-500/30 transition transform hover:scale-[1.02]">
-                    <Video size={24} />
-                    Assistir Transmissão / Vídeo
-                  </a>
-                </div>
-              )}
-
-              {/* Media Gallery */}
-              {selectedNewsItem.media && selectedNewsItem.media.length > 0 && (
-                <div className="space-y-3">
-                  <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-2"><ImageIcon size={18} /> Galeria de Mídia</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    {selectedNewsItem.media.map((media, idx) => (
-                      <div key={idx} className="rounded-xl overflow-hidden h-40 bg-slate-100 dark:bg-slate-800 relative group cursor-pointer" onClick={() => window.open(media.url, '_blank')}>
-                        {media.type === 'VIDEO' ? (
-                          <div className="w-full h-full flex items-center justify-center bg-black/10">
-                            <Play size={32} className="text-white opacity-80" />
-                          </div>
-                        ) : (
-                          <img src={media.url} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" alt="" />
-                        )}
-                      </div>
-                    ))}
+              {/* Content Body */}
+              <div className="p-8 space-y-6">
+                <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+                      <User size={16} className="text-slate-500 dark:text-slate-400" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-900 dark:text-white">{selectedNewsItem.author || 'Redação LocalLegends'}</div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(selectedNewsItem.date).toLocaleDateString('pt-BR')} • Leitura de 2 min</div>
+                    </div>
                   </div>
                 </div>
-              )}
+
+                {/* Main Text */}
+                <div className="prose dark:prose-invert prose-emerald max-w-none">
+                  <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-300 leading-relaxed text-lg">
+                    {selectedNewsItem.content || selectedNewsItem.excerpt}
+                  </p>
+                </div>
+
+                {/* External Link / Stream */}
+                {selectedNewsItem.externalLink && (
+                  <div className="my-6">
+                    <a href={selectedNewsItem.externalLink} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-3 w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-red-500/30 transition transform hover:scale-[1.02]">
+                      <Video size={24} />
+                      Assistir Transmissão / Vídeo
+                    </a>
+                  </div>
+                )}
+
+                {/* Media Gallery */}
+                {selectedNewsItem.media && selectedNewsItem.media.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-2"><ImageIcon size={18} /> Galeria de Mídia</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                      {selectedNewsItem.media.map((media, idx) => (
+                        <div key={idx} className="rounded-xl overflow-hidden h-40 bg-slate-100 dark:bg-slate-800 relative group cursor-pointer" onClick={() => window.open(media.url, '_blank')}>
+                          {media.type === 'VIDEO' ? (
+                            <div className="w-full h-full flex items-center justify-center bg-black/10">
+                              <Play size={32} className="text-white opacity-80" />
+                            </div>
+                          ) : (
+                            <img src={media.url} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" alt="" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* GLOBAL DELETE CONFIRMATION MODAL */}
       {
@@ -4358,46 +4415,48 @@ const App: React.FC = () => {
       }
 
       {/* INVITE MODAL (Moved to end for z-index stacking) */}
-      {isInviteModalOpen && selectedTeamIdForInvite && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in zoom-in-95">
-          <div className="glass-panel rounded-2xl p-8 max-w-sm w-full relative">
-            <button onClick={() => { setIsInviteModalOpen(false); setSelectedTeamIdForInvite(null); setInviteModalEmail(null); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 btn-feedback"><X size={20} /></button>
-            <h3 className="font-bold text-xl mb-2 text-slate-800">Convidar Membro</h3>
-            <p className="text-sm text-slate-500 mb-6">Para <strong>{getTeam(selectedTeamIdForInvite).name}</strong></p>
-            <form onSubmit={handleSendInvite}>
-              <div className="mb-6">
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Opção 1: Enviar por Email</label>
-                <input type="email" name="email" defaultValue={inviteModalEmail || ''} className="w-full border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none input-focus-effect" placeholder="exemplo@email.com" />
-              </div>
-
-              <div className="mb-6">
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Opção 2: Link de Convite</label>
-                <div className="flex gap-2">
-                  <input
-                    readOnly
-                    value={`${window.location.origin}?joinTeam=${selectedTeamIdForInvite}`}
-                    className="w-full border border-slate-300 bg-slate-50 rounded-xl p-3 text-xs text-slate-600 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}?joinTeam=${selectedTeamIdForInvite}`);
-                      alert("Link copiado para a área de transferência!");
-                    }}
-                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 p-3 rounded-xl transition btn-feedback"
-                    title="Copiar Link"
-                  >
-                    <Copy size={18} />
-                  </button>
+      {
+        isInviteModalOpen && selectedTeamIdForInvite && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in zoom-in-95">
+            <div className="glass-panel rounded-2xl p-8 max-w-sm w-full relative">
+              <button onClick={() => { setIsInviteModalOpen(false); setSelectedTeamIdForInvite(null); setInviteModalEmail(null); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 btn-feedback"><X size={20} /></button>
+              <h3 className="font-bold text-xl mb-2 text-slate-800">Convidar Membro</h3>
+              <p className="text-sm text-slate-500 mb-6">Para <strong>{getTeam(selectedTeamIdForInvite).name}</strong></p>
+              <form onSubmit={handleSendInvite}>
+                <div className="mb-6">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Opção 1: Enviar por Email</label>
+                  <input type="email" name="email" defaultValue={inviteModalEmail || ''} className="w-full border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none input-focus-effect" placeholder="exemplo@email.com" />
                 </div>
-                <p className="text-[10px] text-slate-400 mt-2 leading-tight">Envie este link no grupo do WhatsApp. Quem clicar entrará direto no time.</p>
-              </div>
 
-              <button type="submit" className="btn-feedback w-full bg-emerald-600 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200">Enviar Convite (Email)</button>
-            </form>
+                <div className="mb-6">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Opção 2: Link de Convite</label>
+                  <div className="flex gap-2">
+                    <input
+                      readOnly
+                      value={`${window.location.origin}?joinTeam=${selectedTeamIdForInvite}`}
+                      className="w-full border border-slate-300 bg-slate-50 rounded-xl p-3 text-xs text-slate-600 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${window.location.origin}?joinTeam=${selectedTeamIdForInvite}`);
+                        alert("Link copiado para a área de transferência!");
+                      }}
+                      className="bg-slate-200 hover:bg-slate-300 text-slate-700 p-3 rounded-xl transition btn-feedback"
+                      title="Copiar Link"
+                    >
+                      <Copy size={18} />
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-2 leading-tight">Envie este link no grupo do WhatsApp. Quem clicar entrará direto no time.</p>
+                </div>
+
+                <button type="submit" className="btn-feedback w-full bg-emerald-600 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200">Enviar Convite (Email)</button>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* END APP */}
 

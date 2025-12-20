@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserAccount, UserRole, Team, CurrentUser, PlayerStats, SocialConnection, Match, PlayerEvaluation, MatchStatus, Trophy as TrophyType } from '../types';
 import {
-   Camera, Edit2, MapPin, Calendar, Mail, Shield, Crown, Save, X, Activity, Heart, ArrowLeft, Lock, AlertTriangle, Moon, Sun, ChevronDown, Trash2, Trophy
+   Camera, Edit2, MapPin, Calendar, Mail, Shield, Crown, Save, X, Activity, Heart, ArrowLeft, Lock, AlertTriangle, Moon, Sun, ChevronDown, Trash2, Trophy, LogOut
 } from 'lucide-react';
 import { ROLE_DESCRIPTIONS } from '../constants';
 
@@ -29,11 +29,11 @@ interface UserProfileViewProps {
    onDeleteTrophy?: (id: string) => void;
    onBrowseTeams?: () => void;
    onInviteToTeam?: () => void;
-
+   onLogout: () => void;
 }
 
 const UserProfileView: React.FC<UserProfileViewProps> = ({
-   viewingUser, currentUser, teams, socialGraph, matches, evaluations, trophies, onClose, onUpdateProfile, onFollow, onTeamClick, onDeleteUser, onUploadImage, onTogglePlayerRole, theme, toggleTheme, onDeleteEvaluation, onResetEvaluations, onSaveTrophy, onDeleteTrophy, onBrowseTeams, onInviteToTeam
+   viewingUser, currentUser, teams, socialGraph, matches, evaluations, trophies, onClose, onUpdateProfile, onFollow, onTeamClick, onDeleteUser, onUploadImage, onTogglePlayerRole, theme, toggleTheme, onDeleteEvaluation, onResetEvaluations, onSaveTrophy, onDeleteTrophy, onBrowseTeams, onInviteToTeam, onLogout
 }) => {
    const isSelf = currentUser.id === viewingUser.id;
    const isFollowing = socialGraph.some(s => s.followerId === currentUser.id && s.targetId === viewingUser.id);
@@ -256,9 +256,15 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                               </button>
                            </>
                         ) : (
-                           <button onClick={() => setIsEditing(true)} className="px-6 py-2 rounded-lg text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 font-bold text-sm transition flex items-center gap-2 shadow-sm">
-                              <Edit2 size={16} /> Editar Perfil
-                           </button>
+                           <>
+                              <button onClick={() => setIsEditing(true)} className="px-6 py-2 rounded-lg text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 font-bold text-sm transition flex items-center gap-2 shadow-sm">
+                                 <Edit2 size={16} /> Editar Perfil
+                              </button>
+                              {/* Mobile Logout Button */}
+                              <button onClick={onLogout} className="md:hidden px-4 py-2 rounded-lg text-red-500 bg-red-50 hover:bg-red-100 border border-red-100 font-bold text-sm transition flex items-center gap-2 shadow-sm">
+                                 <LogOut size={18} /> Sair
+                              </button>
+                           </>
                         )
                      ) : (
                         <div className="flex gap-2">
@@ -450,7 +456,7 @@ const UserProfileView: React.FC<UserProfileViewProps> = ({
                </div>
             </div>
          </div>
-      </div>
+      </div >
    );
 };
 
