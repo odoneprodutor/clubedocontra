@@ -26,7 +26,7 @@ interface RosterManagerProps {
     evaluations: PlayerEvaluation[];
     onEvaluatePlayer: (player: Player) => void;
     onSaveTactics: (newPositions: TacticalPosition[]) => void;
-    onApplyFormation: (formation: any) => void;
+    onApplyFormation: (formation: any, silent?: boolean) => void;
 }
 
 export const RosterManager: React.FC<RosterManagerProps> = ({
@@ -126,8 +126,8 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
                                     <tr>
                                         <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400">Atleta</th>
                                         <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400">Número</th>
-                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400 hidden sm:table-cell">Posição</th>
-                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400 hidden md:table-cell">Status</th>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400">Posição</th>
+                                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400">Status</th>
                                         <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400 hidden lg:table-cell">Estatísticas</th>
                                         <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400 hidden xl:table-cell">Avaliação</th>
                                         <th className="px-6 py-4 text-[10px] font-black uppercase tracking-wider text-slate-400 text-right">Ações</th>
@@ -190,7 +190,7 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
                                                 </td>
 
                                                 {/* Posição */}
-                                                <td className="px-6 py-4 hidden sm:table-cell">
+                                                <td className="px-6 py-4">
                                                     {isEditing ? (
                                                         <select
                                                             value={editData.position}
@@ -222,7 +222,7 @@ export const RosterManager: React.FC<RosterManagerProps> = ({
                                                 </td>
 
                                                 {/* Status Médico */}
-                                                <td className="px-6 py-4 hidden md:table-cell">
+                                                <td className="px-6 py-4">
                                                     <button
                                                         onClick={() => isEditable && toggleInjury(p)}
                                                         disabled={!isEditable}

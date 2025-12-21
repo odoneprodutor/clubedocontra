@@ -2471,7 +2471,7 @@ const App: React.FC = () => {
                 setIsEvaluationModalOpen(true);
               }}
               onSaveTactics={(pos) => handleSaveTeamTactics(myTeam.id, pos)}
-              onApplyFormation={(form) => applyTacticalPreset(myTeam.id, form)}
+              onApplyFormation={(form, silent) => applyTacticalPreset(myTeam.id, form, silent)}
             />
           </div>
         );
@@ -2960,1298 +2960,1296 @@ const App: React.FC = () => {
                         <div
                           key={p.id}
                           onClick={() => setSelectedPlayerForProfile({ player: p, teamName: myTeam.name })}
-                          className="relative flex items-center gap-4 p-4 rounded-2xl bg-white dark:bg-slate-800/40 border border-slate-100 dark:border-white/5 hover:border-emerald-500/30 dark:hover:border-emerald-500/30 hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:shadow-lg dark:hover:shadow-emerald-900/10 cursor-pointer transition-all duration-300 group overflow-hidden"
+                          className="relative flex items-center gap-3 p-3 rounded-xl bg-white dark:bg-slate-800/40 border border-slate-100 dark:border-white/5 hover:border-emerald-500/30 dark:hover:border-emerald-500/30 hover:bg-slate-50 dark:hover:bg-slate-800/80 hover:shadow-sm dark:hover:shadow-emerald-900/10 cursor-pointer transition-all duration-300 group overflow-hidden"
                         >
                           {/* Hover Gradient Background Effect */}
                           <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/0 to-emerald-500/0 group-hover:from-emerald-500/5 group-hover:via-emerald-500/5 group-hover:to-emerald-500/5 transition-all duration-500" />
 
-                          {/* Avatar Container - Preserving Aspect Ratio */}
+                          {/* Avatar Container - Compact */}
                           <div className="relative z-10 shrink-0">
-                            <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-700 p-0.5 shadow-sm group-hover:scale-105 transition-transform duration-300 border border-slate-200 dark:border-slate-600 group-hover:border-emerald-400 dark:group-hover:border-emerald-500 overflow-hidden">
+                            <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 p-0.5 shadow-sm group-hover:scale-105 transition-transform duration-300 border border-slate-200 dark:border-slate-600 group-hover:border-emerald-400 dark:group-hover:border-emerald-500 overflow-hidden">
                               {avatar ? (
                                 <img src={avatar} alt={p.name} className="w-full h-full rounded-full object-cover aspect-square" />
                               ) : (
                                 <div className="w-full h-full rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center text-slate-400 dark:text-slate-300">
-                                  <User size={24} />
+                                  <User size={18} />
                                 </div>
                               )}
                             </div>
                             {/* Number Badge */}
-                            <div className="absolute -bottom-1 -right-1 bg-slate-900 text-white text-[10px] font-black w-6 h-6 flex items-center justify-center rounded-full border-2 border-white dark:border-slate-800 shadow-md transform group-hover:scale-110 transition-transform z-20">
+                            <div className="absolute -bottom-1 -right-1 bg-slate-900 text-white text-[9px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-white dark:border-slate-800 shadow-md z-20">
                               {p.number}
                             </div>
                           </div>
 
-                          {/* Info */}
-                          <div className="flex-1 min-w-0 relative z-10 flex flex-col justify-center">
-                            <div className="flex justify-between items-start">
-                              <h4 className="font-bold text-slate-800 dark:text-white text-base truncate pr-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                          {/* Player Info - Single Line Compact */}
+                          <div className="flex-1 min-w-0 flex items-center justify-between z-10 gap-2">
+                            <div className="flex flex-col min-w-0">
+                              <h4 className="font-bold text-slate-700 dark:text-slate-200 text-sm truncate group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
                                 {p.name}
                               </h4>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider bg-slate-100 dark:bg-slate-800 px-1.5 rounded">{p.position}</span>
+                                {p.isInjured && <span className="text-[9px] font-bold text-red-500 flex items-center gap-1"><Stethoscope size={9} /> DM</span>}
+                              </div>
                             </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700/50 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-600/50 group-hover:border-emerald-200 dark:group-hover:border-emerald-800 transition-colors">
-                                {p.position}
-                              </span>
-                            </div>
-                          </div>
 
-                          {/* Action Arrow */}
-                          <div className="relative z-10 text-slate-300 dark:text-slate-600 group-hover:text-emerald-500 transition-all duration-300 transform translate-x-4 opacity-0 group-hover:translate-x-0 group-hover:opacity-100">
-                            <ChevronRight size={20} />
+                            <ChevronRight size={16} className="text-slate-300 group-hover:text-emerald-500 group-hover:translate-x-1 transition-transform" />
                           </div>
+                          <ChevronRight size={20} />
                         </div>
-                      );
+                        </div>
+                );
                     })}
-                  </div>
-                ) : (
-                  <div className="text-sm text-slate-400">Nenhum jogador no elenco.</div>
-                )}
               </div>
+              ) : (
+              <div className="text-sm text-slate-400">Nenhum jogador no elenco.</div>
+                )}
             </div>
           </div>
+        </div>
 
-          {/* TEAM NEWS SECTION */}
-          <div className="border-t border-slate-200 dark:border-slate-800 pt-8 mt-4">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-xl">
-                <Newspaper className="text-emerald-600 dark:text-emerald-400" size={24} />
-              </div>
-              <div>
-                <h3 className="text-2xl font-black text-slate-900 dark:text-white">Notícias & Resenhas</h3>
-                <p className="text-sm text-slate-500 font-medium font-inter">Fique por dentro do que acontece no {myTeam.shortName}</p>
-              </div>
+          {/* TEAM NEWS SECTION */ }
+      <div className="border-t border-slate-200 dark:border-slate-800 pt-8 mt-4">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="bg-emerald-100 dark:bg-emerald-900/30 p-2 rounded-xl">
+            <Newspaper className="text-emerald-600 dark:text-emerald-400" size={24} />
+          </div>
+          <div>
+            <h3 className="text-2xl font-black text-slate-900 dark:text-white">Notícias & Resenhas</h3>
+            <p className="text-sm text-slate-500 font-medium font-inter">Fique por dentro do que acontece no {myTeam.shortName}</p>
+          </div>
+        </div>
+
+        {teamNews.length > 0 ? (
+          <div className="space-y-10">
+            {/* Top 3 Featured */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {teamNews.slice(0, 3).map(item => (
+                <div key={item.id} onClick={() => setSelectedNewsItem(item)} className="glass-panel rounded-2xl overflow-hidden interactive-card cursor-pointer group flex flex-col border border-slate-100 hover:border-emerald-200">
+                  <div className="h-40 bg-slate-100 dark:bg-slate-800 relative overflow-hidden">
+                    {item.media && item.media.length > 0 ? (
+                      <img src={item.media[0].url} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" alt={item.title} />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center">
+                        <Newspaper size={40} className="text-emerald-500/30" />
+                      </div>
+                    )}
+                    <div className="absolute top-3 left-3">
+                      <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider shadow-lg">{item.category}</span>
+                    </div>
+                  </div>
+                  <div className="p-4 flex-1 flex flex-col bg-white dark:bg-slate-900">
+                    <span className="text-[10px] text-slate-400 font-bold mb-1">{new Date(item.date).toLocaleDateString()}</span>
+                    <h4 className="font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 transition truncate-2-lines leading-tight uppercase text-sm">{item.title}</h4>
+                    <p className="text-xs text-slate-500 mt-2 line-clamp-2 leading-relaxed">{item.excerpt}</p>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            {teamNews.length > 0 ? (
-              <div className="space-y-10">
-                {/* Top 3 Featured */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {teamNews.slice(0, 3).map(item => (
-                    <div key={item.id} onClick={() => setSelectedNewsItem(item)} className="glass-panel rounded-2xl overflow-hidden interactive-card cursor-pointer group flex flex-col border border-slate-100 hover:border-emerald-200">
-                      <div className="h-40 bg-slate-100 dark:bg-slate-800 relative overflow-hidden">
+            {/* Rest of News */}
+            {teamNews.length > 3 && (
+              <div className="glass-panel rounded-3xl p-6 bg-white/40 dark:bg-slate-900/40">
+                <h4 className="font-bold text-slate-800 dark:text-white mb-6 underline decoration-emerald-500 decoration-2 underline-offset-4 flex items-center gap-2">
+                  <Activity size={18} className="text-emerald-500" />
+                  Histórico de Notícias
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {teamNews.slice(3).map(item => (
+                    <div key={item.id} onClick={() => setSelectedNewsItem(item)} className="flex items-center gap-4 p-3 hover:bg-white dark:hover:bg-slate-800/80 rounded-2xl transition cursor-pointer group border border-transparent hover:border-slate-100 hover:shadow-sm">
+                      <div className="w-16 h-16 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0">
                         {item.media && item.media.length > 0 ? (
-                          <img src={item.media[0].url} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" alt={item.title} />
+                          <img src={item.media[0].url} className="w-full h-full object-cover" alt="" />
                         ) : (
-                          <div className="w-full h-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center">
-                            <Newspaper size={40} className="text-emerald-500/30" />
-                          </div>
+                          <div className="w-full h-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center"><Newspaper size={20} className="text-slate-400" /></div>
                         )}
-                        <div className="absolute top-3 left-3">
-                          <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-1 rounded-lg uppercase tracking-wider shadow-lg">{item.category}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] text-emerald-600 font-bold uppercase">{item.category}</span>
+                          <span className="text-[10px] text-slate-400 font-medium">• {new Date(item.date).toLocaleDateString()}</span>
                         </div>
+                        <h5 className="font-bold text-sm text-slate-800 dark:text-slate-200 truncate group-hover:text-emerald-600 transition uppercase">{item.title}</h5>
                       </div>
-                      <div className="p-4 flex-1 flex flex-col bg-white dark:bg-slate-900">
-                        <span className="text-[10px] text-slate-400 font-bold mb-1">{new Date(item.date).toLocaleDateString()}</span>
-                        <h4 className="font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 transition truncate-2-lines leading-tight uppercase text-sm">{item.title}</h4>
-                        <p className="text-xs text-slate-500 mt-2 line-clamp-2 leading-relaxed">{item.excerpt}</p>
-                      </div>
+                      <ChevronRight size={16} className="text-slate-300 group-hover:text-emerald-500 transition" />
                     </div>
                   ))}
                 </div>
-
-                {/* Rest of News */}
-                {teamNews.length > 3 && (
-                  <div className="glass-panel rounded-3xl p-6 bg-white/40 dark:bg-slate-900/40">
-                    <h4 className="font-bold text-slate-800 dark:text-white mb-6 underline decoration-emerald-500 decoration-2 underline-offset-4 flex items-center gap-2">
-                      <Activity size={18} className="text-emerald-500" />
-                      Histórico de Notícias
-                    </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {teamNews.slice(3).map(item => (
-                        <div key={item.id} onClick={() => setSelectedNewsItem(item)} className="flex items-center gap-4 p-3 hover:bg-white dark:hover:bg-slate-800/80 rounded-2xl transition cursor-pointer group border border-transparent hover:border-slate-100 hover:shadow-sm">
-                          <div className="w-16 h-16 rounded-xl bg-slate-100 dark:bg-slate-800 overflow-hidden shrink-0">
-                            {item.media && item.media.length > 0 ? (
-                              <img src={item.media[0].url} className="w-full h-full object-cover" alt="" />
-                            ) : (
-                              <div className="w-full h-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center"><Newspaper size={20} className="text-slate-400" /></div>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-[10px] text-emerald-600 font-bold uppercase">{item.category}</span>
-                              <span className="text-[10px] text-slate-400 font-medium">• {new Date(item.date).toLocaleDateString()}</span>
-                            </div>
-                            <h5 className="font-bold text-sm text-slate-800 dark:text-slate-200 truncate group-hover:text-emerald-600 transition uppercase">{item.title}</h5>
-                          </div>
-                          <ChevronRight size={16} className="text-slate-300 group-hover:text-emerald-500 transition" />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-center py-16 glass-panel rounded-3xl border-dashed border-2 border-slate-200 bg-slate-50/50">
-                <Newspaper size={48} className="mx-auto text-slate-200 mb-4" />
-                <p className="text-slate-400 text-sm italic font-medium">Nenhuma notícia registrada para o {myTeam.shortName} ainda.</p>
               </div>
             )}
           </div>
-        </div>
+        ) : (
+          <div className="text-center py-16 glass-panel rounded-3xl border-dashed border-2 border-slate-200 bg-slate-50/50">
+            <Newspaper size={48} className="mx-auto text-slate-200 mb-4" />
+            <p className="text-slate-400 text-sm italic font-medium">Nenhuma notícia registrada para o {myTeam.shortName} ainda.</p>
+          </div>
+        )}
+      </div>
+        </div >
       );
     }
 
-    // === UNIFIED TEAM LIST VIEW ===
-    const myTeams = activeTeams.filter(t =>
-      t.createdBy === currentUser!.id ||
-      t.id === currentUser!.teamId
-    );
-    const followedTeamIds = socialGraph.filter(s => s.followerId === currentUser!.id && s.targetType === 'TEAM').map(s => s.targetId);
-    const followedTeams = activeTeams.filter(t => followedTeamIds.includes(t.id) && !myTeams.includes(t));
-    const localTeams = activeTeams.filter(t => t.city.toLowerCase() === (currentUser!.location || '').toLowerCase() && !myTeams.includes(t) && !followedTeams.includes(t));
-    const exploreTeams = activeTeams.filter(t => !myTeams.includes(t) && !followedTeams.includes(t) && !localTeams.includes(t));
+// === UNIFIED TEAM LIST VIEW ===
+const myTeams = activeTeams.filter(t =>
+  t.createdBy === currentUser!.id ||
+  t.id === currentUser!.teamId
+);
+const followedTeamIds = socialGraph.filter(s => s.followerId === currentUser!.id && s.targetType === 'TEAM').map(s => s.targetId);
+const followedTeams = activeTeams.filter(t => followedTeamIds.includes(t.id) && !myTeams.includes(t));
+const localTeams = activeTeams.filter(t => t.city.toLowerCase() === (currentUser!.location || '').toLowerCase() && !myTeams.includes(t) && !followedTeams.includes(t));
+const exploreTeams = activeTeams.filter(t => !myTeams.includes(t) && !followedTeams.includes(t) && !localTeams.includes(t));
 
-    // --- Render Helper ---
-    const renderTeamSection = (title: string, teamList: Team[], Icon: React.ElementType, emptyMsg: string) => (
-      <div className="space-y-4">
-        <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2 pl-2 border-l-4 border-emerald-500">
-          <Icon size={20} className="text-emerald-500" /> {title}
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {teamList.map(t => (
+// --- Render Helper ---
+const renderTeamSection = (title: string, teamList: Team[], Icon: React.ElementType, emptyMsg: string) => (
+  <div className="space-y-4">
+    <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2 pl-2 border-l-4 border-emerald-500">
+      <Icon size={20} className="text-emerald-500" /> {title}
+    </h3>
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      {teamList.map(t => (
+        <div
+          key={t.id}
+          onClick={() => { setViewingTeamId(t.id); setViewingProfileId(null); }}
+          className="group relative bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer border border-slate-100 hover:border-emerald-200"
+        >
+          {/* Banner with Team Color */}
+          <div className="h-24 relative overflow-hidden">
             <div
-              key={t.id}
-              onClick={() => { setViewingTeamId(t.id); setViewingProfileId(null); }}
-              className="group relative bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer border border-slate-100 hover:border-emerald-200"
+              className="absolute inset-0 bg-gradient-to-r from-slate-800 to-slate-900"
+              style={{ background: (t.primaryColor || t.logoColor) ? `linear-gradient(135deg, ${t.primaryColor || t.logoColor}, ${t.secondaryColor || t.primaryColor || t.logoColor})` : '' }}
+            ></div>
+            {t.cover ? (
+              <img src={t.cover} className="w-full h-full object-cover opacity-50 group-hover:opacity-70 transition duration-500" alt={t.name} />
+            ) : (
+              <div className="absolute inset-0 bg-black/20 pattern-grid-lg opacity-30"></div>
+            )}
+            {/* City Badge */}
+            <span className="absolute top-2 right-2 bg-black/40 backdrop-blur text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+              <MapPin size={10} /> {t.city}
+            </span>
+          </div>
+
+          <div className="p-4 relative">
+            {/* Avatar overlapping banner */}
+            <div className="absolute -top-10 left-4 w-16 h-16 rounded-full border-4 border-white bg-white shadow-md flex items-center justify-center overflow-hidden z-10">
+              {t.profilePicture ? (
+                <img src={t.profilePicture} className="w-full h-full object-cover" alt={t.shortName} />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center font-black text-xl text-white" style={{ backgroundColor: t.primaryColor || t.logoColor || '#10b981' }}>
+                  {t.shortName.substring(0, 2).toUpperCase()}
+                </div>
+              )}
+            </div>
+
+            <div className="ml-20 min-h-[40px] flex flex-col justify-center">
+              <h4 className="font-black text-slate-900 leading-tight group-hover:text-emerald-700 transition">{t.name}</h4>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t.sportType}</span>
+            </div>
+
+            <div className="mt-4 flex items-center gap-4 text-xs font-medium text-slate-500 border-t border-slate-50 pt-3">
+              <span className="flex items-center gap-1"><Users size={14} className="text-emerald-500" /> {t.roster.length} Jogadores</span>
+              <span className="flex items-center gap-1"><TrophyIcon size={14} className="text-amber-500" /> {t.wins || 0} Vitórias</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+    {teamList.length === 0 && emptyMsg && (
+      <div className="text-slate-400 text-sm italic py-4 pl-4 border-l-2 border-slate-100">{emptyMsg}</div>
+    )}
+  </div>
+);
+
+return (
+  <div className="space-y-12 animate-in fade-in duration-500">
+    <div className="flex justify-between items-center">
+      <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Times</h2>
+      {currentUser!.role === UserRole.DIRECTOR && (
+        <button
+          onClick={() => setIsTeamModalOpen(true)}
+          className="btn-feedback bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200 flex items-center gap-2"
+        >
+          <Plus size={18} /> Novo Time
+        </button>
+      )}
+    </div>
+
+
+    {/* 1. My Teams */}
+    {renderTeamSection("Meus Times", myTeams, Crown, "Você não gerencia nem participa de nenhum time.")}
+    {/* 2. Followed Teams */}
+    {renderTeamSection("Seguindo", followedTeams, Heart, "Você ainda não segue nenhum time.")}
+    {/* 3. Local Teams */}
+    {renderTeamSection(`Times em ${currentUser!.location || 'sua região'}`, localTeams, MapPin, "Nenhum time encontrado na sua cidade.")}
+    {/* 4. Explore */}
+    {renderTeamSection("Explorar", exploreTeams, Map, "Não há outros times para exibir.")}
+
+
+  </div>
+);
+  };
+
+const renderMatchesView = () => {
+  // 1. FILTER LOGIC
+  let filtered = activeMatches;
+  if (matchStatusFilter !== 'ALL') {
+    filtered = filtered.filter(m => m.status === matchStatusFilter);
+  }
+  if (matchContextFilter === 'FRIENDLY') {
+    filtered = filtered.filter(m => m.type === MatchType.FRIENDLY);
+  } else if (matchContextFilter !== 'ALL') {
+    const tour = activeTournaments.find(t => t.name === matchContextFilter);
+    if (tour) filtered = filtered.filter(m => m.tournamentId === tour.id);
+  }
+
+  // 2. PRIORITY SPLIT LOGIC
+  let myMatches: Match[] = [];
+  let otherMatches: Match[] = [];
+
+  if (currentUser!.role === UserRole.REFEREE) {
+    const assignmentCount = 3;
+    myMatches = filtered.slice(0, assignmentCount);
+    otherMatches = filtered.slice(assignmentCount);
+  } else {
+    // --- NEW LOGIC: FIND ALL USER TEAMS ---
+    // 1. Get all teams where user is in roster OR is creator OR is current context
+    const userTeamIds = activeTeams
+      .filter(t =>
+        t.id === currentUser!.teamId ||
+        t.createdBy === currentUser!.id ||
+        t.roster.some(p => p.userId === currentUser!.id)
+      )
+      .map(t => t.id);
+
+    // 2. Split Matches
+    myMatches = filtered.filter(m => userTeamIds.includes(m.homeTeamId) || userTeamIds.includes(m.awayTeamId));
+    otherMatches = filtered.filter(m => !userTeamIds.includes(m.homeTeamId) && !userTeamIds.includes(m.awayTeamId));
+
+    // 3. Add Followed Teams (for FANS who participate in one team but follow others)
+    if (currentUser!.role === UserRole.FAN) {
+      const followedTeamIds = socialGraph.filter(s => s.followerId === currentUser!.id).map(s => s.targetId);
+      const followedMatches = otherMatches.filter(m => followedTeamIds.includes(m.homeTeamId) || followedTeamIds.includes(m.awayTeamId));
+
+      // Merge unique matches
+      const myMatchIds = new Set(myMatches.map(m => m.id));
+      followedMatches.forEach(m => {
+        if (!myMatchIds.has(m.id)) {
+          myMatches.push(m);
+          // Remove from otherMatches
+          otherMatches = otherMatches.filter(om => om.id !== m.id);
+        }
+      });
+    }
+  }
+  if (currentUser!.role === UserRole.DIRECTOR && matchStatusFilter === MatchStatus.WAITING_ACCEPTANCE) {
+    myMatches = filtered;
+    otherMatches = [];
+  }
+  myMatches.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  otherMatches.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  return (
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+      {/* Header & Filters */}
+      <div className="flex flex-col gap-6">
+        <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Jogos & Resultados</h2>
+
+        {/* ROW 1: Context Filters (Tournaments/Friendly) */}
+        {activeTournaments.length > 0 && (
+          /* CATEGORY FILTERS */
+          <div className="flex flex-wrap gap-2 items-center">
+            <button
+              onClick={() => setMatchContextFilter('ALL')}
+              className={`px-4 py-2 text-sm font-bold rounded-xl transition btn-feedback ${matchContextFilter === 'ALL' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
             >
-              {/* Banner with Team Color */}
-              <div className="h-24 relative overflow-hidden">
-                <div
-                  className="absolute inset-0 bg-gradient-to-r from-slate-800 to-slate-900"
-                  style={{ background: (t.primaryColor || t.logoColor) ? `linear-gradient(135deg, ${t.primaryColor || t.logoColor}, ${t.secondaryColor || t.primaryColor || t.logoColor})` : '' }}
-                ></div>
-                {t.cover ? (
-                  <img src={t.cover} className="w-full h-full object-cover opacity-50 group-hover:opacity-70 transition duration-500" alt={t.name} />
-                ) : (
-                  <div className="absolute inset-0 bg-black/20 pattern-grid-lg opacity-30"></div>
-                )}
-                {/* City Badge */}
-                <span className="absolute top-2 right-2 bg-black/40 backdrop-blur text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                  <MapPin size={10} /> {t.city}
-                </span>
+              Geral
+            </button>
+            <button
+              onClick={() => setMatchContextFilter('FRIENDLY')}
+              className={`px-4 py-2 text-sm font-bold rounded-xl transition btn-feedback ${matchContextFilter === 'FRIENDLY' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
+            >
+              Amistosos
+            </button>
+            <button
+              onClick={() => setMatchContextFilter((matchContextFilter !== 'ALL' && matchContextFilter !== 'FRIENDLY') ? matchContextFilter : activeTournaments[0]?.name || 'TOURNAMENTS')}
+              className={`px-4 py-2 text-sm font-bold rounded-xl transition btn-feedback ${(matchContextFilter !== 'ALL' && matchContextFilter !== 'FRIENDLY') ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
+            >
+              Campeonatos
+            </button>
+
+            {/* TOURNAMENT SELECTOR (Only shows if "Campeonatos" is active) */}
+            {(matchContextFilter !== 'ALL' && matchContextFilter !== 'FRIENDLY') && activeTournaments.length > 0 && (
+              <div className="animate-in fade-in zoom-in-95 duration-200">
+                <select
+                  value={activeTournaments.find(t => t.name === matchContextFilter)?.id || ''}
+                  onChange={(e) => {
+                    const found = activeTournaments.find(t => t.id === e.target.value);
+                    if (found) setMatchContextFilter(found.name);
+                  }}
+                  className="pl-3 pr-8 py-2 rounded-xl bg-white border border-slate-200 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
+                >
+                  {activeTournaments.map(t => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
               </div>
+            )}
+          </div>
+        )}
 
-              <div className="p-4 relative">
-                {/* Avatar overlapping banner */}
-                <div className="absolute -top-10 left-4 w-16 h-16 rounded-full border-4 border-white bg-white shadow-md flex items-center justify-center overflow-hidden z-10">
-                  {t.profilePicture ? (
-                    <img src={t.profilePicture} className="w-full h-full object-cover" alt={t.shortName} />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center font-black text-xl text-white" style={{ backgroundColor: t.primaryColor || t.logoColor || '#10b981' }}>
-                      {t.shortName.substring(0, 2).toUpperCase()}
+        {/* ROW 2: Status Filters */}
+        <div className="flex flex-wrap gap-3">
+          <button onClick={() => setMatchStatusFilter('ALL')} className={`px-4 py-2 rounded-full text-xs font-bold border transition shadow-sm btn-feedback ${matchStatusFilter === 'ALL' ? 'bg-slate-200 border-slate-300 text-slate-900' : 'bg-white border-white text-slate-500 hover:text-slate-900'}`}>
+            Todos
+          </button>
+          <button onClick={() => setMatchStatusFilter(MatchStatus.LIVE)} className={`px-4 py-2 rounded-full text-xs font-bold border transition shadow-sm flex items-center gap-2 btn-feedback ${matchStatusFilter === MatchStatus.LIVE ? 'bg-red-500 border-red-600 text-white' : 'bg-white border-white text-slate-500 hover:text-red-600'}`}>
+            <div className={`w-2 h-2 rounded-full ${matchStatusFilter === MatchStatus.LIVE ? 'bg-white' : 'bg-red-500'} animate-pulse`}></div> Ao Vivo
+          </button>
+          <button onClick={() => setMatchStatusFilter(MatchStatus.SCHEDULED)} className={`px-4 py-2 rounded-full text-xs font-bold border transition shadow-sm btn-feedback ${matchStatusFilter === MatchStatus.SCHEDULED ? 'bg-emerald-500 border-emerald-600 text-white' : 'bg-white border-white text-slate-500 hover:text-emerald-600'}`}>
+            Agendados
+          </button>
+          <button onClick={() => setMatchStatusFilter(MatchStatus.FINISHED)} className={`px-4 py-2 rounded-full text-xs font-bold border transition shadow-sm btn-feedback ${matchStatusFilter === MatchStatus.FINISHED ? 'bg-slate-700 border-slate-800 text-white' : 'bg-white border-white text-slate-500 hover:text-slate-700'}`}>
+            Encerrados
+          </button>
+          {currentUser!.role === UserRole.DIRECTOR && (
+            <button onClick={() => setMatchStatusFilter(MatchStatus.WAITING_ACCEPTANCE)} className={`px-4 py-2 rounded-full text-xs font-bold border transition shadow-sm btn-feedback ${matchStatusFilter === MatchStatus.WAITING_ACCEPTANCE ? 'bg-amber-500 border-amber-600 text-white' : 'bg-white border-white text-slate-500 hover:text-amber-600'}`}>
+              Pendentes
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* SECTION 1: PRIORITY GAMES ("My Games") */}
+      {
+        myMatches.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2 pl-2 border-l-4 border-emerald-500">
+              {currentUser!.role === UserRole.REFEREE ? 'Seus Jogos Atribuídos' : 'Seus Jogos & Times Seguidos'}
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {myMatches.map(m => (
+                <div key={m.id} onClick={() => setSelectedMatchId(m.id)} className="cursor-pointer">
+                  <MatchCard
+                    match={m} homeTeam={getTeam(m.homeTeamId)} awayTeam={getTeam(m.awayTeamId)} arena={getArena(m.arenaId)}
+                    userRole={currentUser!.role} onUpdateScore={handleUpdateScore} onEditDetails={(match) => { setEditingMatch(match); setIsMatchModalOpen(true); }}
+                    onTeamClick={handleTeamClick}
+                    currentUserId={currentUser?.id}
+                    onSavePrediction={handleSavePrediction}
+                    existingPrediction={matchPredictions.find(p => p.matchId === m.id && p.userId === currentUser?.id)}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )
+      }
+
+      {/* SECTION 2: OTHER GAMES (Toggle) */}
+      {
+        otherMatches.length > 0 && (
+          <div className="space-y-6 pt-6 border-t border-slate-200/50">
+            {!showOtherGames ? (
+              <button
+                onClick={() => setShowOtherGames(true)}
+                className="w-full py-4 glass-panel rounded-2xl text-slate-500 font-bold hover:text-emerald-600 transition flex items-center justify-center gap-2 hover:shadow-lg interactive-card"
+              >
+                Ver Outros Jogos da Liga <ChevronDown size={18} />
+              </button>
+            ) : (
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                <div className="flex justify-between items-center px-2">
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    <Calendar size={18} className="text-slate-400" />
+                    Outros Jogos
+                  </h3>
+                  <button onClick={() => setShowOtherGames(false)} className="text-xs font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1 bg-white px-3 py-1 rounded-full shadow-sm btn-feedback">
+                    Ocultar <ChevronUp size={12} />
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {otherMatches.map(m => (
+                    <div key={m.id} onClick={() => setSelectedMatchId(m.id)} className="cursor-pointer">
+                      <MatchCard
+                        match={m} homeTeam={getTeam(m.homeTeamId)} awayTeam={getTeam(m.awayTeamId)} arena={getArena(m.arenaId)}
+                        userRole={currentUser!.role} onUpdateScore={handleUpdateScore} onEditDetails={(match) => { setEditingMatch(match); setIsMatchModalOpen(true); }}
+                        onTeamClick={handleTeamClick}
+                        currentUserId={currentUser?.id}
+                        onSavePrediction={handleSavePrediction}
+                        existingPrediction={matchPredictions.find(p => p.matchId === m.id && p.userId === currentUser?.id)}
+                      />
                     </div>
-                  )}
+                  ))}
                 </div>
+              </div>
+            )}
+          </div>
+        )
+      }
 
-                <div className="ml-20 min-h-[40px] flex flex-col justify-center">
-                  <h4 className="font-black text-slate-900 leading-tight group-hover:text-emerald-700 transition">{t.name}</h4>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{t.sportType}</span>
-                </div>
+      {
+        myMatches.length === 0 && otherMatches.length === 0 && (
+          <div className="text-center py-20 glass-panel rounded-3xl border-dashed border-2 border-slate-300 interactive-card">
+            <Calendar size={48} className="mx-auto text-slate-300 mb-4" />
+            <p className="text-slate-500 font-medium">Nenhum jogo encontrado.</p>
+            {canManage && (
+              <button onClick={() => setIsMatchModalOpen(true)} className="mt-4 text-emerald-600 font-bold hover:underline btn-feedback">
+                Criar uma partida agora
+              </button>
+            )}
+          </div>
+        )
+      }
+    </div >
+  );
+};
 
-                <div className="mt-4 flex items-center gap-4 text-xs font-medium text-slate-500 border-t border-slate-50 pt-3">
-                  <span className="flex items-center gap-1"><Users size={14} className="text-emerald-500" /> {t.roster.length} Jogadores</span>
-                  <span className="flex items-center gap-1"><TrophyIcon size={14} className="text-amber-500" /> {t.wins || 0} Vitórias</span>
+const renderTournamentsView = () => {
+  if (selectedTournamentId) {
+    const tournament = activeTournaments.find(t => t.id === selectedTournamentId);
+    if (!tournament) return null;
+
+    return (
+      <TournamentDetailView
+        tournament={tournament}
+        matches={activeMatches}
+        teams={activeTeams}
+        news={news}
+        arenas={arenas}
+        currentUser={currentUser!}
+        onClose={() => setSelectedTournamentId(null)}
+        onMatchClick={(id) => setSelectedMatchId(id)}
+        onUpdateScore={handleUpdateScore}
+        onEditMatch={(m) => { setEditingMatch(m); setIsMatchModalOpen(true); }}
+        onTeamClick={handleTeamClick}
+        onInviteTeam={handleSendTournamentInvite}
+        onDeleteTournament={(id) => openDeleteModal(id, 'TOURNAMENT')}
+        onUpdateTournament={handleUpdateTournament}
+        onPostNews={handlePostGeneratedNews}
+      />
+    );
+  }
+
+  // Filter Logic
+  const myTournaments = activeTournaments.filter(t =>
+    t.createdBy === currentUser?.id ||
+    (currentUser?.teamId && t.participatingTeamIds.includes(currentUser.teamId))
+  );
+
+  const otherTournaments = activeTournaments.filter(t => !myTournaments.find(mt => mt.id === t.id));
+
+  const exploreTournaments = otherTournaments.filter(t => {
+    // If legacy (no scope), show it
+    if (!t.scope) return true;
+
+    // Private: Hide unless invited (which would be in 'myTournaments' if accepted)
+    if (t.scope === 'PARTICULAR') return false;
+
+    if (t.scope === 'NACIONAL') return true;
+
+    const userLocation = currentUser?.location || '';
+    const [userCity, userState] = userLocation.includes(' - ') ? userLocation.split(' - ') : [userLocation, ''];
+
+    const tourLocation = t.city || '';
+    const [tourCity, tourState] = tourLocation.includes(' - ') ? tourLocation.split(' - ') : [tourLocation, ''];
+
+    if (t.scope === 'ESTADUAL') {
+      return userState && tourState && userState === tourState;
+    }
+
+    if (t.scope === 'MUNICIPAL') {
+      return userCity && tourCity && userCity === tourCity;
+    }
+
+    return true;
+  });
+
+  const renderTournamentCard = (tour: Tournament) => {
+    const isCreator = tour.createdBy === currentUser!.id;
+    return (
+      <div
+        key={tour.id}
+        onClick={() => setSelectedTournamentId(tour.id)}
+        className="glass-panel p-6 rounded-3xl hover:shadow-2xl transition-all duration-300 transform cursor-pointer group relative overflow-hidden interactive-card"
+      >
+        <div className="absolute -right-4 -top-4 w-32 h-32 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full blur-2xl opacity-20 group-hover:opacity-30 transition"></div>
+        <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition group-hover:scale-110 duration-500">
+          <TrophyIcon size={80} />
+        </div>
+
+        <div className="relative z-10">
+          <div className="flex gap-2 mb-4">
+            <span className="text-[10px] font-bold text-white uppercase tracking-wide bg-gradient-to-r from-emerald-500 to-teal-500 px-2 py-1 rounded shadow-sm">
+              {tour.format === 'LEAGUE' ? 'Liga' : 'Mata-Mata'}
+            </span>
+            <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide ${tour.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
+              {tour.status === 'ACTIVE' ? 'Ativo' : 'Encerrado'}
+            </span>
+            {tour.scope && (
+              <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded uppercase tracking-wide">
+                {tour.scope}
+              </span>
+            )}
+          </div>
+
+          <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2 leading-tight group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">{tour.name}</h3>
+          <div className="flex justify-between items-end mt-4">
+            <div className="text-sm text-slate-500 font-medium bg-white/50 px-2 py-1 rounded-lg">
+              {SPORT_TYPE_DETAILS[tour.sportType]?.label}
+            </div>
+            {isCreator && (
+              <button
+                onClick={(e) => { e.stopPropagation(); openDeleteModal(tour.id, 'TOURNAMENT'); }}
+                className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition btn-feedback"
+                title="Excluir"
+              >
+                <Trash2 size={16} />
+              </button>
+            )}
+          </div>
+
+          <div className="mt-6">
+            <div className="flex justify-between text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">
+              <span>Progresso</span>
+              <span>{(tour.currentRound / tour.totalRounds * 100).toFixed(0)}%</span>
+            </div>
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${(tour.currentRound / tour.totalRounds) * 100}%` }}></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-12 animate-in fade-in duration-500">
+      <div className="flex justify-between items-center">
+        <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Campeonatos</h2>
+        {canManage && (
+          <button
+            onClick={() => setIsTournamentModalOpen(true)}
+            className="btn-feedback bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg hover:bg-slate-800 transition flex items-center gap-2"
+          >
+            <Plus size={18} /> Novo
+          </button>
+        )}
+      </div>
+      {/* SECTION 1: MY TOURNAMENTS */}
+      {myTournaments.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-xl font-bold text-slate-900 dark:text-white border-l-4 border-emerald-500 pl-3">Meus Campeonatos (Participando/Criado)</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {myTournaments.map(renderTournamentCard)}
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 2: EXPLORE */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          <h3 className="text-xl font-bold text-slate-900 dark:text-white border-l-4 border-blue-500 pl-3">Explorar Campeonatos</h3>
+        </div>
+
+        {exploreTournaments.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {exploreTournaments.map(renderTournamentCard)}
+          </div>
+        ) : (
+          <div className="col-span-full py-20 text-center text-slate-400 glass-panel rounded-3xl border-dashed border-2 border-slate-200 interactive-card">
+            <TrophyIcon size={48} className="mx-auto text-slate-300 mb-2 opacity-50" />
+            <p>Nenhum campeonato encontrado na sua região.</p>
+            <p className="text-xs mt-2 text-slate-500">({currentUser?.location || 'Localização desconhecida'})</p>
+          </div>
+        )}
+      </div>
+    </div >
+  );
+};
+
+const renderArenasView = () => {
+  if (selectedArenaId) {
+    const arena = arenas.find(a => a.id === selectedArenaId) || SAFE_ARENA;
+    return (
+      <ArenaDetailView
+        arena={arena}
+        matches={matches}
+        teams={teams}
+        currentUserRole={currentUser?.role || UserRole.FAN}
+        onClose={() => setSelectedArenaId(null)}
+        onMatchClick={(matchId) => { setSelectedArenaId(null); setSelectedMatchId(matchId); }} // Close arena view when opening match
+        onUpdateScore={handleUpdateScore}
+        onEditMatch={(match) => { setEditingMatch(match); setIsMatchModalOpen(true); }}
+        onTeamClick={handleTeamClick}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Arenas</h2>
+          <div className="glass-panel p-1 rounded-xl flex text-xs font-bold shadow-sm interactive-card">
+            <button
+              onClick={() => setIsArenasMapMode(false)}
+              className={`px-4 py-2 rounded-lg flex items-center gap-2 transition btn-feedback ${!isArenasMapMode ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:text-slate-900'}`}
+            >
+              <ListIcon size={14} /> Lista
+            </button>
+            <button
+              onClick={() => setIsArenasMapMode(true)}
+              className={`px-4 py-2 rounded-lg flex items-center gap-2 transition btn-feedback ${isArenasMapMode ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:text-slate-900'}`}
+            >
+              <Map size={14} /> Mapa
+            </button>
+          </div>
+        </div>
+        {canManage && (
+          <button
+            onClick={() => setIsArenaModalOpen(true)}
+            className="btn-feedback bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200 flex items-center gap-2"
+          >
+            <Plus size={18} /> Nova
+          </button>
+        )}
+      </div>
+
+      {isArenasMapMode ? (
+        <ArenasMapView arenas={arenas} />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {arenas.map(arena => (
+            <div key={arena.id} onClick={() => setSelectedArenaId(arena.id)} className="glass-panel rounded-2xl overflow-hidden group hover:shadow-xl transition duration-300 interactive-card cursor-pointer">
+              <div className="h-48 bg-slate-200 relative overflow-hidden">
+                <img src={arena.coverPicture || `https://picsum.photos/seed/${arena.id}/600/300`} className="w-full h-full object-cover group-hover:scale-105 transition duration-700" alt="Arena" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
+                <div className="absolute bottom-4 left-4 text-white">
+                  <h3 className="font-bold text-xl flex items-center gap-2">
+                    {arena.name}
+                  </h3>
                 </div>
+                <a
+                  href={arena.googleMapsUrl || `https://www.google.com/maps/search/?api=1&query=${arena.lat},${arena.lng}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute top-4 right-4 bg-white/20 backdrop-blur text-white p-2 rounded-full hover:bg-emerald-500 transition btn-feedback"
+                >
+                  <MapPin size={20} />
+                </a>
+              </div>
+              <div className="p-5">
+                <p className="text-slate-600 text-sm flex items-start gap-2">
+                  <MapPin size={16} className="text-emerald-500 mt-0.5 shrink-0" />
+                  {arena.address}
+                </p>
               </div>
             </div>
           ))}
-        </div>
-        {teamList.length === 0 && emptyMsg && (
-          <div className="text-slate-400 text-sm italic py-4 pl-4 border-l-2 border-slate-100">{emptyMsg}</div>
-        )}
-      </div>
-    );
-
-    return (
-      <div className="space-y-12 animate-in fade-in duration-500">
-        <div className="flex justify-between items-center">
-          <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Times</h2>
-          {currentUser!.role === UserRole.DIRECTOR && (
-            <button
-              onClick={() => setIsTeamModalOpen(true)}
-              className="btn-feedback bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200 flex items-center gap-2"
-            >
-              <Plus size={18} /> Novo Time
-            </button>
+          {arenas.length === 0 && (
+            <div className="col-span-full py-12 text-center text-slate-400 glass-panel rounded-xl border-dashed border-2 border-slate-200 interactive-card">Nenhuma arena cadastrada.</div>
           )}
         </div>
-
-
-        {/* 1. My Teams */}
-        {renderTeamSection("Meus Times", myTeams, Crown, "Você não gerencia nem participa de nenhum time.")}
-        {/* 2. Followed Teams */}
-        {renderTeamSection("Seguindo", followedTeams, Heart, "Você ainda não segue nenhum time.")}
-        {/* 3. Local Teams */}
-        {renderTeamSection(`Times em ${currentUser!.location || 'sua região'}`, localTeams, MapPin, "Nenhum time encontrado na sua cidade.")}
-        {/* 4. Explore */}
-        {renderTeamSection("Explorar", exploreTeams, Map, "Não há outros times para exibir.")}
-
-
-      </div>
-    );
-  };
-
-  const renderMatchesView = () => {
-    // 1. FILTER LOGIC
-    let filtered = activeMatches;
-    if (matchStatusFilter !== 'ALL') {
-      filtered = filtered.filter(m => m.status === matchStatusFilter);
-    }
-    if (matchContextFilter === 'FRIENDLY') {
-      filtered = filtered.filter(m => m.type === MatchType.FRIENDLY);
-    } else if (matchContextFilter !== 'ALL') {
-      const tour = activeTournaments.find(t => t.name === matchContextFilter);
-      if (tour) filtered = filtered.filter(m => m.tournamentId === tour.id);
-    }
-
-    // 2. PRIORITY SPLIT LOGIC
-    let myMatches: Match[] = [];
-    let otherMatches: Match[] = [];
-
-    if (currentUser!.role === UserRole.REFEREE) {
-      const assignmentCount = 3;
-      myMatches = filtered.slice(0, assignmentCount);
-      otherMatches = filtered.slice(assignmentCount);
-    } else {
-      // --- NEW LOGIC: FIND ALL USER TEAMS ---
-      // 1. Get all teams where user is in roster OR is creator OR is current context
-      const userTeamIds = activeTeams
-        .filter(t =>
-          t.id === currentUser!.teamId ||
-          t.createdBy === currentUser!.id ||
-          t.roster.some(p => p.userId === currentUser!.id)
-        )
-        .map(t => t.id);
-
-      // 2. Split Matches
-      myMatches = filtered.filter(m => userTeamIds.includes(m.homeTeamId) || userTeamIds.includes(m.awayTeamId));
-      otherMatches = filtered.filter(m => !userTeamIds.includes(m.homeTeamId) && !userTeamIds.includes(m.awayTeamId));
-
-      // 3. Add Followed Teams (for FANS who participate in one team but follow others)
-      if (currentUser!.role === UserRole.FAN) {
-        const followedTeamIds = socialGraph.filter(s => s.followerId === currentUser!.id).map(s => s.targetId);
-        const followedMatches = otherMatches.filter(m => followedTeamIds.includes(m.homeTeamId) || followedTeamIds.includes(m.awayTeamId));
-
-        // Merge unique matches
-        const myMatchIds = new Set(myMatches.map(m => m.id));
-        followedMatches.forEach(m => {
-          if (!myMatchIds.has(m.id)) {
-            myMatches.push(m);
-            // Remove from otherMatches
-            otherMatches = otherMatches.filter(om => om.id !== m.id);
-          }
-        });
-      }
-    }
-    if (currentUser!.role === UserRole.DIRECTOR && matchStatusFilter === MatchStatus.WAITING_ACCEPTANCE) {
-      myMatches = filtered;
-      otherMatches = [];
-    }
-    myMatches.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    otherMatches.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-    return (
-      <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-
-        {/* Header & Filters */}
-        <div className="flex flex-col gap-6">
-          <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Jogos & Resultados</h2>
-
-          {/* ROW 1: Context Filters (Tournaments/Friendly) */}
-          {activeTournaments.length > 0 && (
-            /* CATEGORY FILTERS */
-            <div className="flex flex-wrap gap-2 items-center">
-              <button
-                onClick={() => setMatchContextFilter('ALL')}
-                className={`px-4 py-2 text-sm font-bold rounded-xl transition btn-feedback ${matchContextFilter === 'ALL' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
-              >
-                Geral
-              </button>
-              <button
-                onClick={() => setMatchContextFilter('FRIENDLY')}
-                className={`px-4 py-2 text-sm font-bold rounded-xl transition btn-feedback ${matchContextFilter === 'FRIENDLY' ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
-              >
-                Amistosos
-              </button>
-              <button
-                onClick={() => setMatchContextFilter((matchContextFilter !== 'ALL' && matchContextFilter !== 'FRIENDLY') ? matchContextFilter : activeTournaments[0]?.name || 'TOURNAMENTS')}
-                className={`px-4 py-2 text-sm font-bold rounded-xl transition btn-feedback ${(matchContextFilter !== 'ALL' && matchContextFilter !== 'FRIENDLY') ? 'bg-slate-900 text-white shadow-lg' : 'bg-white text-slate-500 hover:text-slate-900 hover:bg-slate-100'}`}
-              >
-                Campeonatos
-              </button>
-
-              {/* TOURNAMENT SELECTOR (Only shows if "Campeonatos" is active) */}
-              {(matchContextFilter !== 'ALL' && matchContextFilter !== 'FRIENDLY') && activeTournaments.length > 0 && (
-                <div className="animate-in fade-in zoom-in-95 duration-200">
-                  <select
-                    value={activeTournaments.find(t => t.name === matchContextFilter)?.id || ''}
-                    onChange={(e) => {
-                      const found = activeTournaments.find(t => t.id === e.target.value);
-                      if (found) setMatchContextFilter(found.name);
-                    }}
-                    className="pl-3 pr-8 py-2 rounded-xl bg-white border border-slate-200 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-sm"
-                  >
-                    {activeTournaments.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ROW 2: Status Filters */}
-          <div className="flex flex-wrap gap-3">
-            <button onClick={() => setMatchStatusFilter('ALL')} className={`px-4 py-2 rounded-full text-xs font-bold border transition shadow-sm btn-feedback ${matchStatusFilter === 'ALL' ? 'bg-slate-200 border-slate-300 text-slate-900' : 'bg-white border-white text-slate-500 hover:text-slate-900'}`}>
-              Todos
-            </button>
-            <button onClick={() => setMatchStatusFilter(MatchStatus.LIVE)} className={`px-4 py-2 rounded-full text-xs font-bold border transition shadow-sm flex items-center gap-2 btn-feedback ${matchStatusFilter === MatchStatus.LIVE ? 'bg-red-500 border-red-600 text-white' : 'bg-white border-white text-slate-500 hover:text-red-600'}`}>
-              <div className={`w-2 h-2 rounded-full ${matchStatusFilter === MatchStatus.LIVE ? 'bg-white' : 'bg-red-500'} animate-pulse`}></div> Ao Vivo
-            </button>
-            <button onClick={() => setMatchStatusFilter(MatchStatus.SCHEDULED)} className={`px-4 py-2 rounded-full text-xs font-bold border transition shadow-sm btn-feedback ${matchStatusFilter === MatchStatus.SCHEDULED ? 'bg-emerald-500 border-emerald-600 text-white' : 'bg-white border-white text-slate-500 hover:text-emerald-600'}`}>
-              Agendados
-            </button>
-            <button onClick={() => setMatchStatusFilter(MatchStatus.FINISHED)} className={`px-4 py-2 rounded-full text-xs font-bold border transition shadow-sm btn-feedback ${matchStatusFilter === MatchStatus.FINISHED ? 'bg-slate-700 border-slate-800 text-white' : 'bg-white border-white text-slate-500 hover:text-slate-700'}`}>
-              Encerrados
-            </button>
-            {currentUser!.role === UserRole.DIRECTOR && (
-              <button onClick={() => setMatchStatusFilter(MatchStatus.WAITING_ACCEPTANCE)} className={`px-4 py-2 rounded-full text-xs font-bold border transition shadow-sm btn-feedback ${matchStatusFilter === MatchStatus.WAITING_ACCEPTANCE ? 'bg-amber-500 border-amber-600 text-white' : 'bg-white border-white text-slate-500 hover:text-amber-600'}`}>
-                Pendentes
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* SECTION 1: PRIORITY GAMES ("My Games") */}
-        {
-          myMatches.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="font-bold text-lg text-slate-800 dark:text-white flex items-center gap-2 pl-2 border-l-4 border-emerald-500">
-                {currentUser!.role === UserRole.REFEREE ? 'Seus Jogos Atribuídos' : 'Seus Jogos & Times Seguidos'}
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {myMatches.map(m => (
-                  <div key={m.id} onClick={() => setSelectedMatchId(m.id)} className="cursor-pointer">
-                    <MatchCard
-                      match={m} homeTeam={getTeam(m.homeTeamId)} awayTeam={getTeam(m.awayTeamId)} arena={getArena(m.arenaId)}
-                      userRole={currentUser!.role} onUpdateScore={handleUpdateScore} onEditDetails={(match) => { setEditingMatch(match); setIsMatchModalOpen(true); }}
-                      onTeamClick={handleTeamClick}
-                      currentUserId={currentUser?.id}
-                      onSavePrediction={handleSavePrediction}
-                      existingPrediction={matchPredictions.find(p => p.matchId === m.id && p.userId === currentUser?.id)}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )
-        }
-
-        {/* SECTION 2: OTHER GAMES (Toggle) */}
-        {
-          otherMatches.length > 0 && (
-            <div className="space-y-6 pt-6 border-t border-slate-200/50">
-              {!showOtherGames ? (
-                <button
-                  onClick={() => setShowOtherGames(true)}
-                  className="w-full py-4 glass-panel rounded-2xl text-slate-500 font-bold hover:text-emerald-600 transition flex items-center justify-center gap-2 hover:shadow-lg interactive-card"
-                >
-                  Ver Outros Jogos da Liga <ChevronDown size={18} />
-                </button>
-              ) : (
-                <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
-                  <div className="flex justify-between items-center px-2">
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                      <Calendar size={18} className="text-slate-400" />
-                      Outros Jogos
-                    </h3>
-                    <button onClick={() => setShowOtherGames(false)} className="text-xs font-bold text-slate-400 hover:text-slate-600 flex items-center gap-1 bg-white px-3 py-1 rounded-full shadow-sm btn-feedback">
-                      Ocultar <ChevronUp size={12} />
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {otherMatches.map(m => (
-                      <div key={m.id} onClick={() => setSelectedMatchId(m.id)} className="cursor-pointer">
-                        <MatchCard
-                          match={m} homeTeam={getTeam(m.homeTeamId)} awayTeam={getTeam(m.awayTeamId)} arena={getArena(m.arenaId)}
-                          userRole={currentUser!.role} onUpdateScore={handleUpdateScore} onEditDetails={(match) => { setEditingMatch(match); setIsMatchModalOpen(true); }}
-                          onTeamClick={handleTeamClick}
-                          currentUserId={currentUser?.id}
-                          onSavePrediction={handleSavePrediction}
-                          existingPrediction={matchPredictions.find(p => p.matchId === m.id && p.userId === currentUser?.id)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )
-        }
-
-        {
-          myMatches.length === 0 && otherMatches.length === 0 && (
-            <div className="text-center py-20 glass-panel rounded-3xl border-dashed border-2 border-slate-300 interactive-card">
-              <Calendar size={48} className="mx-auto text-slate-300 mb-4" />
-              <p className="text-slate-500 font-medium">Nenhum jogo encontrado.</p>
-              {canManage && (
-                <button onClick={() => setIsMatchModalOpen(true)} className="mt-4 text-emerald-600 font-bold hover:underline btn-feedback">
-                  Criar uma partida agora
-                </button>
-              )}
-            </div>
-          )
-        }
-      </div >
-    );
-  };
-
-  const renderTournamentsView = () => {
-    if (selectedTournamentId) {
-      const tournament = activeTournaments.find(t => t.id === selectedTournamentId);
-      if (!tournament) return null;
-
-      return (
-        <TournamentDetailView
-          tournament={tournament}
-          matches={activeMatches}
-          teams={activeTeams}
-          news={news}
-          arenas={arenas}
-          currentUser={currentUser!}
-          onClose={() => setSelectedTournamentId(null)}
-          onMatchClick={(id) => setSelectedMatchId(id)}
-          onUpdateScore={handleUpdateScore}
-          onEditMatch={(m) => { setEditingMatch(m); setIsMatchModalOpen(true); }}
-          onTeamClick={handleTeamClick}
-          onInviteTeam={handleSendTournamentInvite}
-          onDeleteTournament={(id) => openDeleteModal(id, 'TOURNAMENT')}
-          onUpdateTournament={handleUpdateTournament}
-          onPostNews={handlePostGeneratedNews}
-        />
-      );
-    }
-
-    // Filter Logic
-    const myTournaments = activeTournaments.filter(t =>
-      t.createdBy === currentUser?.id ||
-      (currentUser?.teamId && t.participatingTeamIds.includes(currentUser.teamId))
-    );
-
-    const otherTournaments = activeTournaments.filter(t => !myTournaments.find(mt => mt.id === t.id));
-
-    const exploreTournaments = otherTournaments.filter(t => {
-      // If legacy (no scope), show it
-      if (!t.scope) return true;
-
-      // Private: Hide unless invited (which would be in 'myTournaments' if accepted)
-      if (t.scope === 'PARTICULAR') return false;
-
-      if (t.scope === 'NACIONAL') return true;
-
-      const userLocation = currentUser?.location || '';
-      const [userCity, userState] = userLocation.includes(' - ') ? userLocation.split(' - ') : [userLocation, ''];
-
-      const tourLocation = t.city || '';
-      const [tourCity, tourState] = tourLocation.includes(' - ') ? tourLocation.split(' - ') : [tourLocation, ''];
-
-      if (t.scope === 'ESTADUAL') {
-        return userState && tourState && userState === tourState;
-      }
-
-      if (t.scope === 'MUNICIPAL') {
-        return userCity && tourCity && userCity === tourCity;
-      }
-
-      return true;
-    });
-
-    const renderTournamentCard = (tour: Tournament) => {
-      const isCreator = tour.createdBy === currentUser!.id;
-      return (
-        <div
-          key={tour.id}
-          onClick={() => setSelectedTournamentId(tour.id)}
-          className="glass-panel p-6 rounded-3xl hover:shadow-2xl transition-all duration-300 transform cursor-pointer group relative overflow-hidden interactive-card"
-        >
-          <div className="absolute -right-4 -top-4 w-32 h-32 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full blur-2xl opacity-20 group-hover:opacity-30 transition"></div>
-          <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition group-hover:scale-110 duration-500">
-            <TrophyIcon size={80} />
-          </div>
-
-          <div className="relative z-10">
-            <div className="flex gap-2 mb-4">
-              <span className="text-[10px] font-bold text-white uppercase tracking-wide bg-gradient-to-r from-emerald-500 to-teal-500 px-2 py-1 rounded shadow-sm">
-                {tour.format === 'LEAGUE' ? 'Liga' : 'Mata-Mata'}
-              </span>
-              <span className={`text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wide ${tour.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>
-                {tour.status === 'ACTIVE' ? 'Ativo' : 'Encerrado'}
-              </span>
-              {tour.scope && (
-                <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded uppercase tracking-wide">
-                  {tour.scope}
-                </span>
-              )}
-            </div>
-
-            <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-2 leading-tight group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">{tour.name}</h3>
-            <div className="flex justify-between items-end mt-4">
-              <div className="text-sm text-slate-500 font-medium bg-white/50 px-2 py-1 rounded-lg">
-                {SPORT_TYPE_DETAILS[tour.sportType]?.label}
-              </div>
-              {isCreator && (
-                <button
-                  onClick={(e) => { e.stopPropagation(); openDeleteModal(tour.id, 'TOURNAMENT'); }}
-                  className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition btn-feedback"
-                  title="Excluir"
-                >
-                  <Trash2 size={16} />
-                </button>
-              )}
-            </div>
-
-            <div className="mt-6">
-              <div className="flex justify-between text-xs font-bold text-slate-400 mb-1 uppercase tracking-wider">
-                <span>Progresso</span>
-                <span>{(tour.currentRound / tour.totalRounds * 100).toFixed(0)}%</span>
-              </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div className="h-full bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${(tour.currentRound / tour.totalRounds) * 100}%` }}></div>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    };
-
-    return (
-      <div className="space-y-12 animate-in fade-in duration-500">
-        <div className="flex justify-between items-center">
-          <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Campeonatos</h2>
-          {canManage && (
-            <button
-              onClick={() => setIsTournamentModalOpen(true)}
-              className="btn-feedback bg-slate-900 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg hover:bg-slate-800 transition flex items-center gap-2"
-            >
-              <Plus size={18} /> Novo
-            </button>
-          )}
-        </div>
-        {/* SECTION 1: MY TOURNAMENTS */}
-        {myTournaments.length > 0 && (
-          <div className="space-y-4">
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white border-l-4 border-emerald-500 pl-3">Meus Campeonatos (Participando/Criado)</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {myTournaments.map(renderTournamentCard)}
-            </div>
-          </div>
-        )}
-
-        {/* SECTION 2: EXPLORE */}
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <h3 className="text-xl font-bold text-slate-900 dark:text-white border-l-4 border-blue-500 pl-3">Explorar Campeonatos</h3>
-          </div>
-
-          {exploreTournaments.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {exploreTournaments.map(renderTournamentCard)}
-            </div>
-          ) : (
-            <div className="col-span-full py-20 text-center text-slate-400 glass-panel rounded-3xl border-dashed border-2 border-slate-200 interactive-card">
-              <TrophyIcon size={48} className="mx-auto text-slate-300 mb-2 opacity-50" />
-              <p>Nenhum campeonato encontrado na sua região.</p>
-              <p className="text-xs mt-2 text-slate-500">({currentUser?.location || 'Localização desconhecida'})</p>
-            </div>
-          )}
-        </div>
-      </div >
-    );
-  };
-
-  const renderArenasView = () => {
-    if (selectedArenaId) {
-      const arena = arenas.find(a => a.id === selectedArenaId) || SAFE_ARENA;
-      return (
-        <ArenaDetailView
-          arena={arena}
-          matches={matches}
-          teams={teams}
-          currentUserRole={currentUser?.role || UserRole.FAN}
-          onClose={() => setSelectedArenaId(null)}
-          onMatchClick={(matchId) => { setSelectedArenaId(null); setSelectedMatchId(matchId); }} // Close arena view when opening match
-          onUpdateScore={handleUpdateScore}
-          onEditMatch={(match) => { setEditingMatch(match); setIsMatchModalOpen(true); }}
-          onTeamClick={handleTeamClick}
-        />
-      );
-    }
-
-    return (
-      <div className="space-y-6 animate-in fade-in duration-500">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-4">
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Arenas</h2>
-            <div className="glass-panel p-1 rounded-xl flex text-xs font-bold shadow-sm interactive-card">
-              <button
-                onClick={() => setIsArenasMapMode(false)}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition btn-feedback ${!isArenasMapMode ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:text-slate-900'}`}
-              >
-                <ListIcon size={14} /> Lista
-              </button>
-              <button
-                onClick={() => setIsArenasMapMode(true)}
-                className={`px-4 py-2 rounded-lg flex items-center gap-2 transition btn-feedback ${isArenasMapMode ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:text-slate-900'}`}
-              >
-                <Map size={14} /> Mapa
-              </button>
-            </div>
-          </div>
-          {canManage && (
-            <button
-              onClick={() => setIsArenaModalOpen(true)}
-              className="btn-feedback bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200 flex items-center gap-2"
-            >
-              <Plus size={18} /> Nova
-            </button>
-          )}
-        </div>
-
-        {isArenasMapMode ? (
-          <ArenasMapView arenas={arenas} />
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {arenas.map(arena => (
-              <div key={arena.id} onClick={() => setSelectedArenaId(arena.id)} className="glass-panel rounded-2xl overflow-hidden group hover:shadow-xl transition duration-300 interactive-card cursor-pointer">
-                <div className="h-48 bg-slate-200 relative overflow-hidden">
-                  <img src={arena.coverPicture || `https://picsum.photos/seed/${arena.id}/600/300`} className="w-full h-full object-cover group-hover:scale-105 transition duration-700" alt="Arena" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent"></div>
-                  <div className="absolute bottom-4 left-4 text-white">
-                    <h3 className="font-bold text-xl flex items-center gap-2">
-                      {arena.name}
-                    </h3>
-                  </div>
-                  <a
-                    href={arena.googleMapsUrl || `https://www.google.com/maps/search/?api=1&query=${arena.lat},${arena.lng}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute top-4 right-4 bg-white/20 backdrop-blur text-white p-2 rounded-full hover:bg-emerald-500 transition btn-feedback"
-                  >
-                    <MapPin size={20} />
-                  </a>
-                </div>
-                <div className="p-5">
-                  <p className="text-slate-600 text-sm flex items-start gap-2">
-                    <MapPin size={16} className="text-emerald-500 mt-0.5 shrink-0" />
-                    {arena.address}
-                  </p>
-                </div>
-              </div>
-            ))}
-            {arenas.length === 0 && (
-              <div className="col-span-full py-12 text-center text-slate-400 glass-panel rounded-xl border-dashed border-2 border-slate-200 interactive-card">Nenhuma arena cadastrada.</div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderNewsView = () => (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
-      <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight mb-8 text-left">Notícias da Liga</h2>
-      <div className="grid grid-cols-1 gap-6">
-        {news.map(n => (
-          <div key={n.id} className="glass-panel p-8 rounded-3xl hover:shadow-xl transition duration-300 cursor-pointer group interactive-card" onClick={() => setSelectedNewsItem(n)}>
-            <div className="flex items-center gap-3 mb-4">
-              <span className="bg-emerald-100 text-emerald-700 text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide">{n.category}</span>
-              <span className="text-slate-500 dark:text-slate-400 text-xs font-medium">{new Date(n.date).toLocaleDateString('pt-BR')}</span>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-6">
-              <div className="flex-1">
-                <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-3 group-hover:text-emerald-500 transition leading-tight">{n.title}</h3>
-                <p className="text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-3 text-sm">{n.excerpt}</p>
-                <div className="mt-4 flex items-center text-emerald-600 font-bold text-sm opacity-100 transition">
-                  Ler matéria completa <ArrowLeft className="rotate-180 ml-2" size={16} />
-                </div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      {news.length === 0 && (
-        <div className="py-20 text-center text-slate-400 glass-panel rounded-3xl border-dashed border-2 border-slate-200 interactive-card">Nenhuma notícia.</div>
       )}
     </div>
   );
+};
 
-  // --- Main Render ---
-
-  return (
-    <div className="min-h-screen font-sans relative bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300">
-      {/* Navbar */}
-      {currentUser && (
-        <nav className="glass-panel dark:glass-panel-dark text-slate-900 dark:text-white sticky top-4 z-40 mx-4 rounded-2xl mb-6 shadow-2xl backdrop-blur-xl">
-          <div className="px-6">
-            <div className="flex justify-between items-center h-20">
-
-              <div className="flex items-center gap-3 cursor-pointer group" onClick={() => changeView('HOME')}>
-                <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-2.5 rounded-xl shadow-lg shadow-emerald-900/50 group-hover:scale-105 transition icon-hover">
-                  <TrophyIcon size={22} className="text-white dark:text-white" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-black text-xl tracking-tight leading-none">Clube<span className="text-emerald-600 dark:text-emerald-400">DoContra</span></span>
-                  <span className="text-[10px] text-slate-400 font-medium tracking-widest uppercase">Sports Manager</span>
-                </div>
+const renderNewsView = () => (
+  <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight mb-8 text-left">Notícias da Liga</h2>
+    <div className="grid grid-cols-1 gap-6">
+      {news.map(n => (
+        <div key={n.id} className="glass-panel p-8 rounded-3xl hover:shadow-xl transition duration-300 cursor-pointer group interactive-card" onClick={() => setSelectedNewsItem(n)}>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="bg-emerald-100 text-emerald-700 text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide">{n.category}</span>
+            <span className="text-slate-500 dark:text-slate-400 text-xs font-medium">{new Date(n.date).toLocaleDateString('pt-BR')}</span>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-6">
+            <div className="flex-1">
+              <h3 className="text-2xl font-bold text-slate-800 dark:text-white mb-3 group-hover:text-emerald-500 transition leading-tight">{n.title}</h3>
+              <p className="text-slate-600 dark:text-slate-300 leading-relaxed line-clamp-3 text-sm">{n.excerpt}</p>
+              <div className="mt-4 flex items-center text-emerald-600 font-bold text-sm opacity-100 transition">
+                Ler matéria completa <ArrowLeft className="rotate-180 ml-2" size={16} />
               </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+    {news.length === 0 && (
+      <div className="py-20 text-center text-slate-400 glass-panel rounded-3xl border-dashed border-2 border-slate-200 interactive-card">Nenhuma notícia.</div>
+    )}
+  </div>
+);
 
-              {/* Desktop Navigation */}
-              <div className="hidden md:flex items-center space-x-2">
-                {[
-                  { id: 'HOME', label: 'Início', icon: Home },
-                  { id: 'TEAMS', label: 'Times', icon: Users },
-                  { id: 'MATCHES', label: 'Jogos', icon: Calendar },
-                  { id: 'TOURNAMENTS', label: 'Camp.', icon: TrophyIcon },
-                  { id: 'ARENAS', label: 'Arenas', icon: MapPin },
-                  { id: 'PLAYERS', label: 'Mercado', icon: Search },
-                  { id: 'NEWS', label: 'Notícias', icon: Newspaper },
-                ].map((item) => {
-                  const isActive = currentView === item.id && !selectedMatchId;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => changeView(item.id as AppView)}
-                      className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 btn-feedback ${isActive ? 'bg-emerald-600 text-white dark:bg-white dark:text-emerald-900 shadow-lg scale-105' : 'text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-900/5 dark:hover:bg-white/10'
-                        }`}
-                    >
-                      <item.icon size={18} className={isActive ? 'text-white dark:text-emerald-600' : ''} />
-                      {item.label}
-                    </button>
-                  );
-                })}
+// --- Main Render ---
 
+return (
+  <div className="min-h-screen font-sans relative bg-slate-50 text-slate-800 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-300">
+    {/* Navbar */}
+    {currentUser && (
+      <nav className="glass-panel dark:glass-panel-dark text-slate-900 dark:text-white sticky top-4 z-40 mx-4 rounded-2xl mb-6 shadow-2xl backdrop-blur-xl">
+        <div className="px-6">
+          <div className="flex justify-between items-center h-20">
+
+            <div className="flex items-center gap-3 cursor-pointer group" onClick={() => changeView('HOME')}>
+              <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-2.5 rounded-xl shadow-lg shadow-emerald-900/50 group-hover:scale-105 transition icon-hover">
+                <TrophyIcon size={22} className="text-white dark:text-white" />
               </div>
+              <div className="flex flex-col">
+                <span className="font-black text-xl tracking-tight leading-none">Clube<span className="text-emerald-600 dark:text-emerald-400">DoContra</span></span>
+                <span className="text-[10px] text-slate-400 font-medium tracking-widest uppercase">Sports Manager</span>
+              </div>
+            </div>
 
-              <div className="flex items-center gap-2 md:gap-4">
-                <div className="flex items-center gap-2 md:gap-3">
-                  {/* Notification Bell */}
-                  <div className="relative" ref={notificationRef}>
-                    <button onClick={() => setIsNotificationsOpen(!isNotificationsOpen)} className="text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white p-2 rounded-full hover:bg-slate-900/5 dark:hover:bg-white/10 transition relative btn-feedback">
-                      <Bell size={22} />
-                      {unreadNotifications.length > 0 && (
-                        <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-900 animate-pulse"></span>
-                      )}
-                    </button>
-                    {isNotificationsOpen && (
-                      <div className="absolute right-0 mt-4 w-80 bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl text-slate-800 p-2 z-50 border border-white/20 animate-in zoom-in-95 origin-top-right">
-                        <h4 className="text-xs font-bold text-slate-400 uppercase mb-2 px-3 pt-2">Notificações</h4>
-                        {unreadNotifications.length === 0 ? (
-                          <div className="text-sm text-slate-500 text-center py-6">Nenhuma notificação nova</div>
-                        ) : (
-                          unreadNotifications.map(n => (
-                            <div key={n.id} className="p-3 hover:bg-emerald-50/50 rounded-xl mb-1 border-b border-slate-100 last:border-0 transition">
-                              <p className="text-sm font-bold text-slate-800">{n.fromName}</p>
-                              {n.type === 'TEAM_INVITE' && (
-                                <p className="text-xs text-slate-500 mb-3">Convidou você para entrar em <span className="font-bold text-emerald-600">{n.data?.teamName}</span></p>
-                              )}
-                              {n.type === 'TOURNAMENT_INVITE' && (
-                                <p className="text-xs text-slate-500 mb-3">Convidou <span className="font-bold">{n.data?.teamName}</span> para o campeonato <span className="font-bold">{n.data?.tournamentName}</span></p>
-                              )}
-                              <div className="flex gap-2">
-                                <button onClick={() => handleDeclineInvite(n.id)} className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs py-2 rounded-lg font-bold transition btn-feedback">
-                                  Recusar
-                                </button>
-                                <button onClick={() => handleAcceptInvite(n.id)} className="flex-[2] bg-emerald-600 hover:bg-emerald-500 text-white text-xs py-2 rounded-lg font-bold shadow-md transition btn-feedback">
-                                  Aceitar Convite
-                                </button>
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2 md:gap-3 cursor-pointer p-1.5 pl-2 pr-2 md:pr-4 rounded-full bg-slate-900/5 dark:bg-white/5 border border-slate-900/10 dark:border-white/10 hover:bg-slate-900/10 dark:hover:bg-white/10 transition btn-feedback max-w-[150px] md:max-w-none" onClick={() => setViewingProfileId(currentUser.id)}>
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white font-bold text-sm border-2 border-white/20 shadow-md overflow-hidden">
-                      {currentUser.avatar ? <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" /> : currentUser.name.charAt(0)}
-                    </div>
-                    <div className="hidden md:flex flex-col items-start">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white leading-tight">{currentUser.name}</span>
-                      <span className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-black tracking-wider">{currentUser.role}</span>
-                    </div>
-                  </div>
-
-                  <button onClick={handleLogout} className="hidden md:block p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-full transition btn-feedback" title="Sair">
-                    <LogOut size={20} />
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex items-center space-x-2">
+              {[
+                { id: 'HOME', label: 'Início', icon: Home },
+                { id: 'TEAMS', label: 'Times', icon: Users },
+                { id: 'MATCHES', label: 'Jogos', icon: Calendar },
+                { id: 'TOURNAMENTS', label: 'Camp.', icon: TrophyIcon },
+                { id: 'ARENAS', label: 'Arenas', icon: MapPin },
+                { id: 'PLAYERS', label: 'Mercado', icon: Search },
+                { id: 'NEWS', label: 'Notícias', icon: Newspaper },
+              ].map((item) => {
+                const isActive = currentView === item.id && !selectedMatchId;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => changeView(item.id as AppView)}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 btn-feedback ${isActive ? 'bg-emerald-600 text-white dark:bg-white dark:text-emerald-900 shadow-lg scale-105' : 'text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white hover:bg-slate-900/5 dark:hover:bg-white/10'
+                      }`}
+                  >
+                    <item.icon size={18} className={isActive ? 'text-white dark:text-emerald-600' : ''} />
+                    {item.label}
                   </button>
-                </div>
-              </div>
+                );
+              })}
+
             </div>
-          </div>
-        </nav>
-      )}
 
-      {/* --- Main Content --- */}
-      <main className="max-w-7xl mx-auto w-full p-4 md:p-6 pb-24 md:pb-12 relative z-10">
-        {currentView === 'HOME' && renderHomeView()}
-        {currentView === 'TEAMS' && renderTeamsView()}
-        {currentView === 'MATCHES' && renderMatchesView()}
-        {currentView === 'TOURNAMENTS' && renderTournamentsView()}
-        {currentView === 'ARENAS' && renderArenasView()}
-        {currentView === 'NEWS' && renderNewsView()}
-        {currentView === 'PLAYERS' && (
-          <div className="p-4 md:p-8 max-w-7xl mx-auto w-full">
-            <PlayerDirectory
-              users={userAccounts}
-              currentUser={currentUser!}
-              socialGraph={socialGraph}
-              onFollow={handleFollow}
-              onViewProfile={(uid) => setViewingProfileId(uid)}
-            />
-          </div>
-        )}
-      </main>
-
-      {/* --- Mobile Bottom Navigation --- */}
-      {currentUser && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-slate-200 p-2 z-40 md:hidden flex justify-around items-center shadow-2xl safe-area-bottom">
-          {[
-            { id: 'HOME', label: 'Início', icon: Home },
-            { id: 'TEAMS', label: 'Times', icon: Shield },
-            { id: 'MATCHES', label: 'Jogos', icon: Calendar },
-            { id: 'PLAYERS', label: 'Mercado', icon: Search },
-            { id: 'TOURNAMENTS', label: 'Camp.', icon: TrophyIcon },
-            { id: 'NEWS', label: 'Notícias', icon: Newspaper },
-          ].map((item) => {
-            const isActive = currentView === item.id && !selectedMatchId;
-            return (
-              <button
-                key={item.id}
-                onClick={() => changeView(item.id as AppView)}
-                className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-300 w-16 btn-feedback ${isActive ? 'text-emerald-700 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-950/50' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
-              >
-                <item.icon size={20} className={isActive ? 'fill-current' : ''} />
-                <span className="text-[10px] font-bold">{item.label}</span>
-              </button>
-            );
-          })}
-
-
-          <button
-            onClick={() => setViewingProfileId(currentUser.id)}
-            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-300 w-16 btn-feedback ${viewingProfileId ? 'text-emerald-700 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-950/50' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
-          >
-            <User size={20} />
-            <span className="text-[10px] font-bold">Perfil</span>
-          </button>
-        </div>
-      )}
-
-      {/* --- Floating Action Button (Director) --- */}
-      {canManage && !isMatchModalOpen && !isTournamentModalOpen && !selectedMatchId && !selectedTournamentId && currentUser && (
-        <div className={`fixed z-40 transition-all duration-300 ${isFabMenuOpen ? 'bottom-[90px] right-4' : 'bottom-[80px] right-4 md:bottom-10 md:right-10'}`}>
-          {/* Main Button */}
-          <button
-            onClick={() => setIsFabMenuOpen(!isFabMenuOpen)}
-            className={`w-14 h-14 md:w-16 md:h-16 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 btn-feedback ${isFabMenuOpen ? 'bg-slate-800 text-white rotate-45 scale-90' : 'bg-emerald-500 hover:bg-emerald-400 text-white hover:scale-105'
-              }`}
-          >
-            <Plus size={28} className="md:w-8 md:h-8" />
-          </button>
-
-          {/* Menu Items */}
-          <div className={`absolute bottom-full right-0 mb-4 flex flex-col gap-3 items-end transition-all duration-300 origin-bottom-right ${isFabMenuOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-50 translate-y-10 pointer-events-none'}`}>
-            <button onClick={() => { setIsFabMenuOpen(false); setEditingMatch(null); setIsMatchModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback whitespace-nowrap">
-              <Calendar size={18} /> Novo Jogo
-            </button>
-            <button onClick={() => { setIsFabMenuOpen(false); setEditingTeam(null); setIsTeamModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback whitespace-nowrap">
-              <Users size={18} /> Novo Time
-            </button>
-            <button onClick={() => { setIsFabMenuOpen(false); setIsTournamentModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback whitespace-nowrap">
-              <TrophyIcon size={18} /> Novo Camp.
-            </button>
-            <button onClick={() => { setIsFabMenuOpen(false); setIsArenaModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback whitespace-nowrap">
-              <MapPin size={18} /> Nova Arena
-            </button>
-          </div>
-        </div>
-      )
-      }
-
-      {/* --- MODALS --- */}
-
-      {/* MATCH DETAIL VIEW OVERLAY */}
-      {
-        selectedMatchId && !isMatchModalOpen && (
-          (() => {
-            const m = matches.find(x => x.id === selectedMatchId);
-            if (!m) return null;
-            const hTeam = getTeam(m.homeTeamId);
-            const aTeam = getTeam(m.awayTeamId);
-            const arena = getArena(m.arenaId);
-
-            return (
-              <MatchDetailView
-                match={m}
-                homeTeam={hTeam}
-                awayTeam={aTeam}
-                arena={arena}
-                currentUser={currentUser!}
-                onClose={() => setSelectedMatchId(null)}
-                onAddEvent={handleAddEvent}
-                onViewPlayer={(p) => { if (p.userId) setViewingProfileId(p.userId); }}
-                onSendMessage={handleSendMessage}
-                onSaveMatchTactics={handleSaveMatchTactics}
-                onAddMedia={handleAddMatchMedia}
-                onFinishMatch={handleFinishMatch}
-                onUpdateStreams={handleUpdateStreams}
-                onStartBroadcast={() => handleStartBroadcast(m.id)}
-                onUpdateStatus={(id, status) => handleUpdateScore(id, m.homeScore, m.awayScore, status)}
-                onPostNews={handlePostGeneratedNews}
-              />
-            );
-          })()
-        )
-      }
-
-      {/* GLOBAL BROADCASTER OVERLAY (Persistent through navigation) */}
-      {/* Agora Broadcaster Removed - Feature Disabled temporarily */}
-
-      {/* --- MODALS --- */}
-
-      {/* 1. MATCH MODAL */}
-      {
-        isMatchModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div className="glass-panel text-slate-900 mx-auto w-full max-w-lg rounded-3xl p-8 max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-black">{editingMatch ? 'Editar Jogo' : 'Novo Jogo'}</h2>
-                <button onClick={() => setIsMatchModalOpen(false)}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
-              </div>
-              <form onSubmit={handleSaveMatch} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mandante</label>
-                    <select
-                      name="homeTeamId"
-                      defaultValue={editingMatch?.homeTeamId}
-                      className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200"
-                      required
-                      onChange={(e) => {
-                        // Force re-render to update away team filter
-                        setEditingMatch(prev => ({ ...(prev || {} as any), homeTeamId: e.target.value }));
-                      }}
-                    >
-                      <option value="" disabled selected={!editingMatch}>Selecione...</option>
-                      {activeTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Visitante</label>
-                    <select name="awayTeamId" defaultValue={editingMatch?.awayTeamId} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required>
-                      <option value="" disabled selected={!editingMatch}>Selecione...</option>
-                      {activeTeams
-                        .filter(t => t.id !== (editingMatch?.homeTeamId || (document.querySelector('[name="homeTeamId"]') as HTMLSelectElement)?.value))
-                        .map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data e Hora</label>
-                    <input type="datetime-local" name="date" defaultValue={editingMatch?.date} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Arena</label>
-                    <select name="arenaId" defaultValue={editingMatch?.arenaId} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required>
-                      {arenas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <input type="hidden" name="type" value="FRIENDLY" />
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Esporte</label>
-                    <select name="sportType" defaultValue={editingMatch?.sportType || 'FUT7'} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
-                      {Object.entries(SPORT_TYPE_DETAILS).map(([key, val]) => (
-                        <option key={key} value={key}>{val.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rodada</label>
-                    <input type="text" name="round" defaultValue={editingMatch?.round || '1'} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" placeholder="Ex: 1" />
-                  </div>
-                </div>
-
-                {/* Tournament Select Removed */}
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Vídeo Youtube (Link)</label>
-                  <input type="url" name="youtubeUrl" defaultValue={editingMatch?.youtubeVideoId ? `https://youtube.com/watch?v=${editingMatch.youtubeVideoId}` : ''} placeholder="https://..." className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fotos do Jogo</label>
-                  <input type="file" name="media" multiple accept="image/*" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  {editingMatch && (
-                    <button type="button" onClick={() => openDeleteModal(editingMatch.id, 'MATCH')} className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl hover:bg-red-100 transition">Excluir</button>
+            <div className="flex items-center gap-2 md:gap-4">
+              <div className="flex items-center gap-2 md:gap-3">
+                {/* Notification Bell */}
+                <div className="relative" ref={notificationRef}>
+                  <button onClick={() => setIsNotificationsOpen(!isNotificationsOpen)} className="text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white p-2 rounded-full hover:bg-slate-900/5 dark:hover:bg-white/10 transition relative btn-feedback">
+                    <Bell size={22} />
+                    {unreadNotifications.length > 0 && (
+                      <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-slate-900 animate-pulse"></span>
+                    )}
+                  </button>
+                  {isNotificationsOpen && (
+                    <div className="absolute right-0 mt-4 w-80 bg-white/90 backdrop-blur-xl rounded-2xl shadow-2xl text-slate-800 p-2 z-50 border border-white/20 animate-in zoom-in-95 origin-top-right">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase mb-2 px-3 pt-2">Notificações</h4>
+                      {unreadNotifications.length === 0 ? (
+                        <div className="text-sm text-slate-500 text-center py-6">Nenhuma notificação nova</div>
+                      ) : (
+                        unreadNotifications.map(n => (
+                          <div key={n.id} className="p-3 hover:bg-emerald-50/50 rounded-xl mb-1 border-b border-slate-100 last:border-0 transition">
+                            <p className="text-sm font-bold text-slate-800">{n.fromName}</p>
+                            {n.type === 'TEAM_INVITE' && (
+                              <p className="text-xs text-slate-500 mb-3">Convidou você para entrar em <span className="font-bold text-emerald-600">{n.data?.teamName}</span></p>
+                            )}
+                            {n.type === 'TOURNAMENT_INVITE' && (
+                              <p className="text-xs text-slate-500 mb-3">Convidou <span className="font-bold">{n.data?.teamName}</span> para o campeonato <span className="font-bold">{n.data?.tournamentName}</span></p>
+                            )}
+                            <div className="flex gap-2">
+                              <button onClick={() => handleDeclineInvite(n.id)} className="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs py-2 rounded-lg font-bold transition btn-feedback">
+                                Recusar
+                              </button>
+                              <button onClick={() => handleAcceptInvite(n.id)} className="flex-[2] bg-emerald-600 hover:bg-emerald-500 text-white text-xs py-2 rounded-lg font-bold shadow-md transition btn-feedback">
+                                Aceitar Convite
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
                   )}
-                  <button type="submit" className="flex-[2] bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200">Salvar Jogo</button>
                 </div>
-              </form>
+
+                <div className="flex items-center gap-2 md:gap-3 cursor-pointer p-1.5 pl-2 pr-2 md:pr-4 rounded-full bg-slate-900/5 dark:bg-white/5 border border-slate-900/10 dark:border-white/10 hover:bg-slate-900/10 dark:hover:bg-white/10 transition btn-feedback max-w-[150px] md:max-w-none" onClick={() => setViewingProfileId(currentUser.id)}>
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-400 to-teal-600 flex items-center justify-center text-white font-bold text-sm border-2 border-white/20 shadow-md overflow-hidden">
+                    {currentUser.avatar ? <img src={currentUser.avatar} alt={currentUser.name} className="w-full h-full object-cover" /> : currentUser.name.charAt(0)}
+                  </div>
+                  <div className="hidden md:flex flex-col items-start">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white leading-tight">{currentUser.name}</span>
+                    <span className="text-[9px] text-emerald-600 dark:text-emerald-400 uppercase font-black tracking-wider">{currentUser.role}</span>
+                  </div>
+                </div>
+
+                <button onClick={handleLogout} className="hidden md:block p-2 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-full transition btn-feedback" title="Sair">
+                  <LogOut size={20} />
+                </button>
+              </div>
             </div>
           </div>
-        )
-      }
+        </div>
+      </nav>
+    )}
 
-      {/* 2. TEAM MODAL */}
-      {
-        isTeamModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div className="glass-panel text-slate-900 mx-auto w-full max-w-md rounded-3xl p-8">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-black">{editingTeam ? 'Editar Time' : 'Criar Novo Time'}</h2>
-                <button onClick={() => { setIsTeamModalOpen(false); setEditingTeam(null); }}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
+    {/* --- Main Content --- */}
+    <main className="max-w-7xl mx-auto w-full p-4 md:p-6 pb-24 md:pb-12 relative z-10">
+      {currentView === 'HOME' && renderHomeView()}
+      {currentView === 'TEAMS' && renderTeamsView()}
+      {currentView === 'MATCHES' && renderMatchesView()}
+      {currentView === 'TOURNAMENTS' && renderTournamentsView()}
+      {currentView === 'ARENAS' && renderArenasView()}
+      {currentView === 'NEWS' && renderNewsView()}
+      {currentView === 'PLAYERS' && (
+        <div className="p-4 md:p-8 max-w-7xl mx-auto w-full">
+          <PlayerDirectory
+            users={userAccounts}
+            currentUser={currentUser!}
+            socialGraph={socialGraph}
+            onFollow={handleFollow}
+            onViewProfile={(uid) => setViewingProfileId(uid)}
+          />
+        </div>
+      )}
+    </main>
+
+    {/* --- Mobile Bottom Navigation --- */}
+    {currentUser && (
+      <div className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t border-slate-200 p-2 z-40 md:hidden flex justify-around items-center shadow-2xl safe-area-bottom">
+        {[
+          { id: 'HOME', label: 'Início', icon: Home },
+          { id: 'TEAMS', label: 'Times', icon: Shield },
+          { id: 'MATCHES', label: 'Jogos', icon: Calendar },
+          { id: 'PLAYERS', label: 'Mercado', icon: Search },
+          { id: 'TOURNAMENTS', label: 'Camp.', icon: TrophyIcon },
+          { id: 'NEWS', label: 'Notícias', icon: Newspaper },
+        ].map((item) => {
+          const isActive = currentView === item.id && !selectedMatchId;
+          return (
+            <button
+              key={item.id}
+              onClick={() => changeView(item.id as AppView)}
+              className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-300 w-16 btn-feedback ${isActive ? 'text-emerald-700 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-950/50' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
+            >
+              <item.icon size={20} className={isActive ? 'fill-current' : ''} />
+              <span className="text-[10px] font-bold">{item.label}</span>
+            </button>
+          );
+        })}
+
+
+        <button
+          onClick={() => setViewingProfileId(currentUser.id)}
+          className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-300 w-16 btn-feedback ${viewingProfileId ? 'text-emerald-700 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-950/50' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300'}`}
+        >
+          <User size={20} />
+          <span className="text-[10px] font-bold">Perfil</span>
+        </button>
+      </div>
+    )}
+
+    {/* --- Floating Action Button (Director) --- */}
+    {canManage && !isMatchModalOpen && !isTournamentModalOpen && !selectedMatchId && !selectedTournamentId && currentUser && (
+      <div className={`fixed z-40 transition-all duration-300 ${isFabMenuOpen ? 'bottom-[90px] right-4' : 'bottom-[80px] right-4 md:bottom-10 md:right-10'}`}>
+        {/* Main Button */}
+        <button
+          onClick={() => setIsFabMenuOpen(!isFabMenuOpen)}
+          className={`w-14 h-14 md:w-16 md:h-16 rounded-full shadow-2xl flex items-center justify-center transition-all duration-300 btn-feedback ${isFabMenuOpen ? 'bg-slate-800 text-white rotate-45 scale-90' : 'bg-emerald-500 hover:bg-emerald-400 text-white hover:scale-105'
+            }`}
+        >
+          <Plus size={28} className="md:w-8 md:h-8" />
+        </button>
+
+        {/* Menu Items */}
+        <div className={`absolute bottom-full right-0 mb-4 flex flex-col gap-3 items-end transition-all duration-300 origin-bottom-right ${isFabMenuOpen ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-50 translate-y-10 pointer-events-none'}`}>
+          <button onClick={() => { setIsFabMenuOpen(false); setEditingMatch(null); setIsMatchModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback whitespace-nowrap">
+            <Calendar size={18} /> Novo Jogo
+          </button>
+          <button onClick={() => { setIsFabMenuOpen(false); setEditingTeam(null); setIsTeamModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback whitespace-nowrap">
+            <Users size={18} /> Novo Time
+          </button>
+          <button onClick={() => { setIsFabMenuOpen(false); setIsTournamentModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback whitespace-nowrap">
+            <TrophyIcon size={18} /> Novo Camp.
+          </button>
+          <button onClick={() => { setIsFabMenuOpen(false); setIsArenaModalOpen(true); }} className="flex items-center gap-2 bg-white text-emerald-900 px-4 py-2 rounded-xl font-bold shadow-lg shadow-black/10 hover:bg-emerald-50 transition btn-feedback whitespace-nowrap">
+            <MapPin size={18} /> Nova Arena
+          </button>
+        </div>
+      </div>
+    )
+    }
+
+    {/* --- MODALS --- */}
+
+    {/* MATCH DETAIL VIEW OVERLAY */}
+    {
+      selectedMatchId && !isMatchModalOpen && (
+        (() => {
+          const m = matches.find(x => x.id === selectedMatchId);
+          if (!m) return null;
+          const hTeam = getTeam(m.homeTeamId);
+          const aTeam = getTeam(m.awayTeamId);
+          const arena = getArena(m.arenaId);
+
+          return (
+            <MatchDetailView
+              match={m}
+              homeTeam={hTeam}
+              awayTeam={aTeam}
+              arena={arena}
+              currentUser={currentUser!}
+              onClose={() => setSelectedMatchId(null)}
+              onAddEvent={handleAddEvent}
+              onViewPlayer={(p) => { if (p.userId) setViewingProfileId(p.userId); }}
+              onSendMessage={handleSendMessage}
+              onSaveMatchTactics={handleSaveMatchTactics}
+              onAddMedia={handleAddMatchMedia}
+              onFinishMatch={handleFinishMatch}
+              onUpdateStreams={handleUpdateStreams}
+              onStartBroadcast={() => handleStartBroadcast(m.id)}
+              onUpdateStatus={(id, status) => handleUpdateScore(id, m.homeScore, m.awayScore, status)}
+              onPostNews={handlePostGeneratedNews}
+            />
+          );
+        })()
+      )
+    }
+
+    {/* GLOBAL BROADCASTER OVERLAY (Persistent through navigation) */}
+    {/* Agora Broadcaster Removed - Feature Disabled temporarily */}
+
+    {/* --- MODALS --- */}
+
+    {/* 1. MATCH MODAL */}
+    {
+      isMatchModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="glass-panel text-slate-900 mx-auto w-full max-w-lg rounded-3xl p-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black">{editingMatch ? 'Editar Jogo' : 'Novo Jogo'}</h2>
+              <button onClick={() => setIsMatchModalOpen(false)}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
+            </div>
+            <form onSubmit={handleSaveMatch} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mandante</label>
+                  <select
+                    name="homeTeamId"
+                    defaultValue={editingMatch?.homeTeamId}
+                    className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200"
+                    required
+                    onChange={(e) => {
+                      // Force re-render to update away team filter
+                      setEditingMatch(prev => ({ ...(prev || {} as any), homeTeamId: e.target.value }));
+                    }}
+                  >
+                    <option value="" disabled selected={!editingMatch}>Selecione...</option>
+                    {activeTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Visitante</label>
+                  <select name="awayTeamId" defaultValue={editingMatch?.awayTeamId} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required>
+                    <option value="" disabled selected={!editingMatch}>Selecione...</option>
+                    {activeTeams
+                      .filter(t => t.id !== (editingMatch?.homeTeamId || (document.querySelector('[name="homeTeamId"]') as HTMLSelectElement)?.value))
+                      .map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
               </div>
-              <form onSubmit={editingTeam ? handleUpdateTeam : handleCreateTeam} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Time</label>
-                  <input type="text" name="teamName" defaultValue={editingTeam?.name} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="Ex: Rocket FC" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Sigla (3 letras)</label>
-                    <input type="text" name="shortName" defaultValue={editingTeam?.shortName} maxLength={3} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 uppercase" required placeholder="ROC" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cidade Sede</label>
-                    <CitySelect name="city" value={editingTeam?.city} onChange={() => { }} required />
-                  </div>
-                </div>
 
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Modalidade Principal</label>
-                  <select name="sportType" defaultValue={editingTeam?.sportType || 'FUT7'} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data e Hora</label>
+                  <input type="datetime-local" name="date" defaultValue={editingMatch?.date} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Arena</label>
+                  <select name="arenaId" defaultValue={editingMatch?.arenaId} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required>
+                    {arenas.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <input type="hidden" name="type" value="FRIENDLY" />
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Esporte</label>
+                  <select name="sportType" defaultValue={editingMatch?.sportType || 'FUT7'} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
                     {Object.entries(SPORT_TYPE_DETAILS).map(([key, val]) => (
                       <option key={key} value={key}>{val.label}</option>
                     ))}
                   </select>
                 </div>
-
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cores do Time</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div>
-                      <span className="text-[10px] text-slate-400">Primária*</span>
-                      <input type="color" name="primaryColor" defaultValue={editingTeam?.primaryColor || editingTeam?.logoColor || '#10b981'} className="w-full h-10 rounded cursor-pointer" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400">Secundária*</span>
-                      <input type="color" name="secondaryColor" defaultValue={editingTeam?.secondaryColor || '#0f172a'} className="w-full h-10 rounded cursor-pointer" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400">Terciária</span>
-                      <input type="color" name="tertiaryColor" defaultValue={editingTeam?.tertiaryColor || ''} className="w-full h-10 rounded cursor-pointer" />
-                    </div>
-                  </div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rodada</label>
+                  <input type="text" name="round" defaultValue={editingMatch?.round || '1'} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" placeholder="Ex: 1" />
                 </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Escudo (Avatar)</label>
-                    <input type="file" name="profilePicture" accept="image/*" className="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Capa (Banner)</label>
-                    <input type="file" name="cover" accept="image/*" className="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
-                  </div>
-                </div>
-
-                <div className="flex gap-2 mt-4">
-                  {editingTeam && (
-                    <button type="button" onClick={() => openDeleteModal(editingTeam.id, 'TEAM')} className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl hover:bg-red-100 transition">Excluir</button>
-                  )}
-                  <button type="submit" className="flex-[2] bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200">
-                    {editingTeam ? 'Atualizar' : 'Criar Time'}
-                  </button>
-                </div>
-              </form>
-            </div >
-          </div >
-        )
-      }
-
-
-
-      {/* 3. TOURNAMENT MODAL */}
-      {
-        isTournamentModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div className="glass-panel text-slate-900 mx-auto w-full max-w-md rounded-3xl p-8">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-black">Novo Campeonato</h2>
-                <button onClick={() => setIsTournamentModalOpen(false)}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
               </div>
-              <form onSubmit={handleSaveTournament} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Campeonato</label>
-                  <input type="text" name="name" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="Copa de Verão 2024" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Formato</label>
-                  <select name="format" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <option value="LEAGUE">Pontos Corridos</option>
-                    <option value="KNOCKOUT">Mata-Mata</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Esporte</label>
-                  <select name="sportType" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
-                    <option value="FUT7">Futebol Society (7)</option>
-                    <option value="FUTSAL">Futsal (5)</option>
-                    <option value="FUT6">Fut 6</option>
-                    <option value="AMATEUR">Campo (11) Amador</option>
-                    <option value="PROFESSIONAL">Campo (11) Profissional</option>
-                  </select>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Abrangência</label>
-                    <select name="scope" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-500">
-                      <option value="PARTICULAR">Particular</option>
-                      <option value="MUNICIPAL">Municipal</option>
-                      <option value="ESTADUAL">Estadual</option>
-                      <option value="NACIONAL">Nacional</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cidade Sede</label>
-                    <CitySelect name="city" required />
-                  </div>
-                </div>
+              {/* Tournament Select Removed */}
 
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Número de Times</label>
-                  <input type="number" name="maxTeams" defaultValue={8} min={2} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required />
-                  <p className="text-[10px] text-slate-400 mt-1">Rodadas e chaves serão calculadas automaticamente.</p>
-                </div>
-                <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 mt-2">Criar Campeonato</button>
-              </form >
-            </div >
-          </div >
-        )
-      }
-
-      {/* 4. ARENA MODAL */}
-      {
-        isArenaModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div className="glass-panel text-slate-900 mx-auto w-full max-w-md rounded-3xl p-8">
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-black">Nova Arena</h2>
-                <button onClick={() => setIsArenaModalOpen(false)}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Vídeo Youtube (Link)</label>
+                <input type="url" name="youtubeUrl" defaultValue={editingMatch?.youtubeVideoId ? `https://youtube.com/watch?v=${editingMatch.youtubeVideoId}` : ''} placeholder="https://..." className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" />
               </div>
-              <form onSubmit={handleCreateArena} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Local</label>
-                  <input type="text" name="name" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="Arena Society..." />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Endereço</label>
-                  <input type="text" name="address" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="Rua X, 123" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cidade</label>
-                  <CitySelect name="city" onChange={() => { }} required />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Link do Google Maps</label>
-                  <input type="url" name="googleMapsUrl" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" placeholder="https://maps.google.com/..." />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Foto Principal</label>
-                    <input type="file" name="profilePicture" accept="image/*" className="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Capa (Opcional)</label>
-                    <input type="file" name="coverPicture" accept="image/*" className="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
-                  </div>
-                </div>
-                <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 mt-2">Salvar Arena</button>
-              </form>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Fotos do Jogo</label>
+                <input type="file" name="media" multiple accept="image/*" className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                {editingMatch && (
+                  <button type="button" onClick={() => openDeleteModal(editingMatch.id, 'MATCH')} className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl hover:bg-red-100 transition">Excluir</button>
+                )}
+                <button type="submit" className="flex-[2] bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200">Salvar Jogo</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )
+    }
+
+    {/* 2. TEAM MODAL */}
+    {
+      isTeamModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="glass-panel text-slate-900 mx-auto w-full max-w-md rounded-3xl p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black">{editingTeam ? 'Editar Time' : 'Criar Novo Time'}</h2>
+              <button onClick={() => { setIsTeamModalOpen(false); setEditingTeam(null); }}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
             </div>
+            <form onSubmit={editingTeam ? handleUpdateTeam : handleCreateTeam} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Time</label>
+                <input type="text" name="teamName" defaultValue={editingTeam?.name} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="Ex: Rocket FC" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Sigla (3 letras)</label>
+                  <input type="text" name="shortName" defaultValue={editingTeam?.shortName} maxLength={3} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 uppercase" required placeholder="ROC" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cidade Sede</label>
+                  <CitySelect name="city" value={editingTeam?.city} onChange={() => { }} required />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Modalidade Principal</label>
+                <select name="sportType" defaultValue={editingTeam?.sportType || 'FUT7'} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  {Object.entries(SPORT_TYPE_DETAILS).map(([key, val]) => (
+                    <option key={key} value={key}>{val.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cores do Time</label>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <span className="text-[10px] text-slate-400">Primária*</span>
+                    <input type="color" name="primaryColor" defaultValue={editingTeam?.primaryColor || editingTeam?.logoColor || '#10b981'} className="w-full h-10 rounded cursor-pointer" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400">Secundária*</span>
+                    <input type="color" name="secondaryColor" defaultValue={editingTeam?.secondaryColor || '#0f172a'} className="w-full h-10 rounded cursor-pointer" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400">Terciária</span>
+                    <input type="color" name="tertiaryColor" defaultValue={editingTeam?.tertiaryColor || ''} className="w-full h-10 rounded cursor-pointer" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Escudo (Avatar)</label>
+                  <input type="file" name="profilePicture" accept="image/*" className="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Capa (Banner)</label>
+                  <input type="file" name="cover" accept="image/*" className="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
+                </div>
+              </div>
+
+              <div className="flex gap-2 mt-4">
+                {editingTeam && (
+                  <button type="button" onClick={() => openDeleteModal(editingTeam.id, 'TEAM')} className="flex-1 bg-red-50 text-red-600 font-bold py-3 rounded-xl hover:bg-red-100 transition">Excluir</button>
+                )}
+                <button type="submit" className="flex-[2] bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200">
+                  {editingTeam ? 'Atualizar' : 'Criar Time'}
+                </button>
+              </div>
+            </form>
+          </div >
+        </div >
+      )
+    }
+
+
+
+    {/* 3. TOURNAMENT MODAL */}
+    {
+      isTournamentModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="glass-panel text-slate-900 mx-auto w-full max-w-md rounded-3xl p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black">Novo Campeonato</h2>
+              <button onClick={() => setIsTournamentModalOpen(false)}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
+            </div>
+            <form onSubmit={handleSaveTournament} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Campeonato</label>
+                <input type="text" name="name" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="Copa de Verão 2024" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Formato</label>
+                <select name="format" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <option value="LEAGUE">Pontos Corridos</option>
+                  <option value="KNOCKOUT">Mata-Mata</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Esporte</label>
+                <select name="sportType" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200">
+                  <option value="FUT7">Futebol Society (7)</option>
+                  <option value="FUTSAL">Futsal (5)</option>
+                  <option value="FUT6">Fut 6</option>
+                  <option value="AMATEUR">Campo (11) Amador</option>
+                  <option value="PROFESSIONAL">Campo (11) Profissional</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Abrangência</label>
+                  <select name="scope" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-emerald-500">
+                    <option value="PARTICULAR">Particular</option>
+                    <option value="MUNICIPAL">Municipal</option>
+                    <option value="ESTADUAL">Estadual</option>
+                    <option value="NACIONAL">Nacional</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cidade Sede</label>
+                  <CitySelect name="city" required />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Número de Times</label>
+                <input type="number" name="maxTeams" defaultValue={8} min={2} className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required />
+                <p className="text-[10px] text-slate-400 mt-1">Rodadas e chaves serão calculadas automaticamente.</p>
+              </div>
+              <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 mt-2">Criar Campeonato</button>
+            </form >
+          </div >
+        </div >
+      )
+    }
+
+    {/* 4. ARENA MODAL */}
+    {
+      isArenaModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="glass-panel text-slate-900 mx-auto w-full max-w-md rounded-3xl p-8">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black">Nova Arena</h2>
+              <button onClick={() => setIsArenaModalOpen(false)}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
+            </div>
+            <form onSubmit={handleCreateArena} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do Local</label>
+                <input type="text" name="name" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="Arena Society..." />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Endereço</label>
+                <input type="text" name="address" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" required placeholder="Rua X, 123" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cidade</label>
+                <CitySelect name="city" onChange={() => { }} required />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Link do Google Maps</label>
+                <input type="url" name="googleMapsUrl" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200" placeholder="https://maps.google.com/..." />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Foto Principal</label>
+                  <input type="file" name="profilePicture" accept="image/*" className="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Capa (Opcional)</label>
+                  <input type="file" name="coverPicture" accept="image/*" className="w-full text-xs text-slate-500 file:mr-2 file:py-2 file:px-2 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100" />
+                </div>
+              </div>
+              <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 mt-2">Salvar Arena</button>
+            </form>
           </div>
-        )
-      }
+        </div>
+      )
+    }
 
-      {/* 5. USER PROFILE MODAL */}
-      {
-        viewingProfileId && (
-          <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-0 md:p-4 bg-white md:bg-black/60 backdrop-blur-sm animate-in fade-in overflow-y-auto">
-            <UserProfileView
-              viewingUser={userAccounts.find(u => u.id === viewingProfileId) || currentUser!}
-              currentUser={currentUser!}
-              teams={teams}
-              socialGraph={socialGraph}
-              onClose={() => setViewingProfileId(null)}
-              onUpdateProfile={handleUpdateProfile}
-              onFollow={handleFollow}
-              onTeamClick={(teamId) => { setViewingProfileId(null); setViewingTeamId(teamId); setCurrentView('TEAMS'); }}
-              onBrowseTeams={() => { setViewingProfileId(null); setCurrentView('TEAMS'); }}
-              onInviteToTeam={() => {
-                const targetUser = userAccounts.find(u => u.id === viewingProfileId);
+    {/* 5. USER PROFILE MODAL */}
+    {
+      viewingProfileId && (
+        <div className="fixed inset-0 z-50 flex items-start md:items-center justify-center p-0 md:p-4 bg-white md:bg-black/60 backdrop-blur-sm animate-in fade-in overflow-y-auto">
+          <UserProfileView
+            viewingUser={userAccounts.find(u => u.id === viewingProfileId) || currentUser!}
+            currentUser={currentUser!}
+            teams={teams}
+            socialGraph={socialGraph}
+            onClose={() => setViewingProfileId(null)}
+            onUpdateProfile={handleUpdateProfile}
+            onFollow={handleFollow}
+            onTeamClick={(teamId) => { setViewingProfileId(null); setViewingTeamId(teamId); setCurrentView('TEAMS'); }}
+            onBrowseTeams={() => { setViewingProfileId(null); setCurrentView('TEAMS'); }}
+            onInviteToTeam={() => {
+              const targetUser = userAccounts.find(u => u.id === viewingProfileId);
 
-                // Robust Team Detection for Director
-                let myTeamId = currentUser?.teamId;
-                if (!myTeamId && currentUser?.role === UserRole.DIRECTOR) {
-                  // Fallback: Check if I am the creator of any team
-                  const ownedTeam = teams.find(t => t.createdBy === currentUser.id);
-                  if (ownedTeam) myTeamId = ownedTeam.id;
-                }
+              // Robust Team Detection for Director
+              let myTeamId = currentUser?.teamId;
+              if (!myTeamId && currentUser?.role === UserRole.DIRECTOR) {
+                // Fallback: Check if I am the creator of any team
+                const ownedTeam = teams.find(t => t.createdBy === currentUser.id);
+                if (ownedTeam) myTeamId = ownedTeam.id;
+              }
 
-                if (myTeamId) {
-                  setSelectedTeamIdForInvite(myTeamId);
-                  setInviteModalEmail(targetUser?.email || '');
-                  setIsInviteModalOpen(true);
-                } else {
-                  alert("Você precisa ser Diretor de um time para convidar. Verifique se você criou ou está vinculado a um time.");
-                }
-              }}
+              if (myTeamId) {
+                setSelectedTeamIdForInvite(myTeamId);
+                setInviteModalEmail(targetUser?.email || '');
+                setIsInviteModalOpen(true);
+              } else {
+                alert("Você precisa ser Diretor de um time para convidar. Verifique se você criou ou está vinculado a um time.");
+              }
+            }}
 
-              onDeleteUser={(userId) => {
-                if (confirm("Tem certeza que deseja remover este usuário?")) {
-                  alert("Funcionalidade de exclusão de usuário a ser implementada completamente.");
-                }
-              }}
-              onUploadImage={uploadImage}
-              onTogglePlayerRole={handleTogglePlayerRole}
-              theme={theme}
-              toggleTheme={toggleTheme}
-              evaluations={evaluations}
-              matches={matches}
-              trophies={trophies}
-              onDeleteEvaluation={handleDeleteEvaluation}
-              onResetEvaluations={handleResetEvaluations}
-              onSaveTrophy={handleSaveTrophy}
-              onDeleteTrophy={handleDeleteTrophy}
-              onLogout={handleLogout}
-            />
-          </div>
-        )
-      }
+            onDeleteUser={(userId) => {
+              if (confirm("Tem certeza que deseja remover este usuário?")) {
+                alert("Funcionalidade de exclusão de usuário a ser implementada completamente.");
+              }
+            }}
+            onUploadImage={uploadImage}
+            onTogglePlayerRole={handleTogglePlayerRole}
+            theme={theme}
+            toggleTheme={toggleTheme}
+            evaluations={evaluations}
+            matches={matches}
+            trophies={trophies}
+            onDeleteEvaluation={handleDeleteEvaluation}
+            onResetEvaluations={handleResetEvaluations}
+            onSaveTrophy={handleSaveTrophy}
+            onDeleteTrophy={handleDeleteTrophy}
+            onLogout={handleLogout}
+          />
+        </div>
+      )
+    }
 
-      {/* 5. INVITE MODAL is handled locally in Teams View, but we also have isInviteModalOpen logic used generally... 
+    {/* 5. INVITE MODAL is handled locally in Teams View, but we also have isInviteModalOpen logic used generally... 
           Wait, the generic isInviteModalOpen was used inside Team View in line 1539.
           But if we open it from elsewhere, we might need it globally? 
           Actually, line 1539 uses logic: {isInviteModalOpen && selectedTeamIdForInvite && (...)}.
@@ -4263,197 +4261,197 @@ const App: React.FC = () => {
           Let's assume it's covered there or not needed globally.
       */}
 
-      {/* 6. EVALUATION MODAL */}
-      {
-        isEvaluationModalOpen && selectedPlayerForEvaluation && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div className="glass-panel text-slate-900 mx-auto w-full max-w-md rounded-3xl p-8 max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <h2 className="text-2xl font-black">Avaliar Atleta</h2>
-                  <p className="text-sm text-slate-500 font-bold">{selectedPlayerForEvaluation.player.name}</p>
-                </div>
-                <button onClick={() => setIsEvaluationModalOpen(false)}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
+    {/* 6. EVALUATION MODAL */}
+    {
+      isEvaluationModalOpen && selectedPlayerForEvaluation && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="glass-panel text-slate-900 mx-auto w-full max-w-md rounded-3xl p-8 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h2 className="text-2xl font-black">Avaliar Atleta</h2>
+                <p className="text-sm text-slate-500 font-bold">{selectedPlayerForEvaluation.player.name}</p>
               </div>
-              <form onSubmit={handleSaveEvaluation} className="space-y-4">
+              <button onClick={() => setIsEvaluationModalOpen(false)}><X size={24} className="text-slate-400 hover:text-red-500" /></button>
+            </div>
+            <form onSubmit={handleSaveEvaluation} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nota Geral (0-10)</label>
+                <input type="number" name="rating" min="0" max="10" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-center text-xl" required />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nota Geral (0-10)</label>
-                  <input type="number" name="rating" min="0" max="10" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 font-bold text-center text-xl" required />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Técnica</label>
-                    <input type="number" name="technicalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tática</label>
-                    <input type="number" name="tacticalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Físico</label>
-                    <input type="number" name="physicalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mental</label>
-                    <input type="number" name="mentalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
-                  </div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Técnica</label>
+                  <input type="number" name="technicalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Comentários / Feedback</label>
-                  <textarea name="comments" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 h-24 resize-none" placeholder="Pontos fortes, pontos a melhorar..."></textarea>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tática</label>
+                  <input type="number" name="tacticalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
                 </div>
-                <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 mt-2">Salvar Avaliação</button>
-              </form>
-            </div>
-          </div>
-        )
-      }
-
-      {/* GLOBAL NEWS MODAL */}
-      {
-        selectedNewsItem && (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
-            <div className="bg-white dark:bg-slate-900 mx-auto w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto relative animate-in zoom-in-95">
-              {/* Header - No Image, just Gradient */}
-              <div className="h-48 relative bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col justify-end p-6">
-                <button
-                  onClick={() => setSelectedNewsItem(null)}
-                  className="absolute top-4 right-4 bg-white/10 backdrop-blur text-white p-2 rounded-full hover:bg-white/20 transition"
-                >
-                  <X size={24} />
-                </button>
                 <div>
-                  <span className="bg-emerald-500 text-white text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide mb-3 inline-block shadow-md">{selectedNewsItem.category}</span>
-                  <h2 className="text-2xl md:text-3xl font-black text-white leading-tight drop-shadow-md">{selectedNewsItem.title}</h2>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Físico</label>
+                  <input type="number" name="physicalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mental</label>
+                  <input type="number" name="mentalScore" min="0" max="100" className="w-full p-2 bg-slate-50 rounded-lg border border-slate-200" placeholder="0-100" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Comentários / Feedback</label>
+                <textarea name="comments" className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 h-24 resize-none" placeholder="Pontos fortes, pontos a melhorar..."></textarea>
+              </div>
+              <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-500 transition shadow-lg shadow-emerald-200 mt-2">Salvar Avaliação</button>
+            </form>
+          </div>
+        </div>
+      )
+    }
+
+    {/* GLOBAL NEWS MODAL */}
+    {
+      selectedNewsItem && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white dark:bg-slate-900 mx-auto w-full max-w-2xl rounded-3xl overflow-hidden shadow-2xl max-h-[90vh] overflow-y-auto relative animate-in zoom-in-95">
+            {/* Header - No Image, just Gradient */}
+            <div className="h-48 relative bg-gradient-to-br from-slate-900 to-slate-800 flex flex-col justify-end p-6">
+              <button
+                onClick={() => setSelectedNewsItem(null)}
+                className="absolute top-4 right-4 bg-white/10 backdrop-blur text-white p-2 rounded-full hover:bg-white/20 transition"
+              >
+                <X size={24} />
+              </button>
+              <div>
+                <span className="bg-emerald-500 text-white text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wide mb-3 inline-block shadow-md">{selectedNewsItem.category}</span>
+                <h2 className="text-2xl md:text-3xl font-black text-white leading-tight drop-shadow-md">{selectedNewsItem.title}</h2>
+              </div>
+            </div>
+
+            {/* Content Body */}
+            <div className="p-8 space-y-6">
+              <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
+                    <User size={16} className="text-slate-500 dark:text-slate-400" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-slate-900 dark:text-white">{selectedNewsItem.author || 'Redação LocalLegends'}</div>
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(selectedNewsItem.date).toLocaleDateString('pt-BR')} • Leitura de 2 min</div>
+                  </div>
                 </div>
               </div>
 
-              {/* Content Body */}
-              <div className="p-8 space-y-6">
-                <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-4">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center">
-                      <User size={16} className="text-slate-500 dark:text-slate-400" />
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-white">{selectedNewsItem.author || 'Redação LocalLegends'}</div>
-                      <div className="text-[10px] text-slate-500 dark:text-slate-400">{new Date(selectedNewsItem.date).toLocaleDateString('pt-BR')} • Leitura de 2 min</div>
-                    </div>
+              {/* Main Text */}
+              <div className="prose dark:prose-invert prose-emerald max-w-none">
+                <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-300 leading-relaxed text-lg">
+                  {selectedNewsItem.content || selectedNewsItem.excerpt}
+                </p>
+              </div>
+
+              {/* External Link / Stream */}
+              {selectedNewsItem.externalLink && (
+                <div className="my-6">
+                  <a href={selectedNewsItem.externalLink} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-3 w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-red-500/30 transition transform hover:scale-[1.02]">
+                    <Video size={24} />
+                    Assistir Transmissão / Vídeo
+                  </a>
+                </div>
+              )}
+
+              {/* Media Gallery */}
+              {selectedNewsItem.media && selectedNewsItem.media.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-2"><ImageIcon size={18} /> Galeria de Mídia</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    {selectedNewsItem.media.map((media, idx) => (
+                      <div key={idx} className="rounded-xl overflow-hidden h-40 bg-slate-100 dark:bg-slate-800 relative group cursor-pointer" onClick={() => window.open(media.url, '_blank')}>
+                        {media.type === 'VIDEO' ? (
+                          <div className="w-full h-full flex items-center justify-center bg-black/10">
+                            <Play size={32} className="text-white opacity-80" />
+                          </div>
+                        ) : (
+                          <img src={media.url} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" alt="" />
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )
+    }
 
-                {/* Main Text */}
-                <div className="prose dark:prose-invert prose-emerald max-w-none">
-                  <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-300 leading-relaxed text-lg">
-                    {selectedNewsItem.content || selectedNewsItem.excerpt}
-                  </p>
-                </div>
+    {/* GLOBAL DELETE CONFIRMATION MODAL */}
+    {
+      itemToDelete && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-in zoom-in-95">
+            <div className="flex flex-col items-center text-center">
+              <div className="bg-red-100 p-3 rounded-full mb-4">
+                <AlertTriangle className="text-red-600" size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Tem certeza?</h3>
+              <p className="text-slate-500 text-sm mb-6">Esta ação não pode ser desfeita. O item será excluído permanentemente.</p>
 
-                {/* External Link / Stream */}
-                {selectedNewsItem.externalLink && (
-                  <div className="my-6">
-                    <a href={selectedNewsItem.externalLink} target="_blank" rel="noreferrer" className="flex items-center justify-center gap-3 w-full bg-red-600 hover:bg-red-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-red-500/30 transition transform hover:scale-[1.02]">
-                      <Video size={24} />
-                      Assistir Transmissão / Vídeo
-                    </a>
-                  </div>
-                )}
-
-                {/* Media Gallery */}
-                {selectedNewsItem.media && selectedNewsItem.media.length > 0 && (
-                  <div className="space-y-3">
-                    <h4 className="font-bold text-slate-900 dark:text-white flex items-center gap-2"><ImageIcon size={18} /> Galeria de Mídia</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      {selectedNewsItem.media.map((media, idx) => (
-                        <div key={idx} className="rounded-xl overflow-hidden h-40 bg-slate-100 dark:bg-slate-800 relative group cursor-pointer" onClick={() => window.open(media.url, '_blank')}>
-                          {media.type === 'VIDEO' ? (
-                            <div className="w-full h-full flex items-center justify-center bg-black/10">
-                              <Play size={32} className="text-white opacity-80" />
-                            </div>
-                          ) : (
-                            <img src={media.url} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" alt="" />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+              <div className="flex gap-3 w-full">
+                <button onClick={() => setItemToDelete(null)} className="flex-1 py-3 font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition">Cancelar</button>
+                <button onClick={executeDeletion} className="flex-1 py-3 font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition shadow-lg shadow-red-200">Excluir</button>
               </div>
             </div>
           </div>
-        )
-      }
+        </div>
+      )
+    }
 
-      {/* GLOBAL DELETE CONFIRMATION MODAL */}
-      {
-        itemToDelete && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-            <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl animate-in zoom-in-95">
-              <div className="flex flex-col items-center text-center">
-                <div className="bg-red-100 p-3 rounded-full mb-4">
-                  <AlertTriangle className="text-red-600" size={32} />
-                </div>
-                <h3 className="text-xl font-bold text-slate-900 mb-2">Tem certeza?</h3>
-                <p className="text-slate-500 text-sm mb-6">Esta ação não pode ser desfeita. O item será excluído permanentemente.</p>
-
-                <div className="flex gap-3 w-full">
-                  <button onClick={() => setItemToDelete(null)} className="flex-1 py-3 font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition">Cancelar</button>
-                  <button onClick={executeDeletion} className="flex-1 py-3 font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl transition shadow-lg shadow-red-200">Excluir</button>
-                </div>
+    {/* INVITE MODAL (Moved to end for z-index stacking) */}
+    {
+      isInviteModalOpen && selectedTeamIdForInvite && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in zoom-in-95">
+          <div className="glass-panel rounded-2xl p-8 max-w-sm w-full relative">
+            <button onClick={() => { setIsInviteModalOpen(false); setSelectedTeamIdForInvite(null); setInviteModalEmail(null); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 btn-feedback"><X size={20} /></button>
+            <h3 className="font-bold text-xl mb-2 text-slate-800">Convidar Membro</h3>
+            <p className="text-sm text-slate-500 mb-6">Para <strong>{getTeam(selectedTeamIdForInvite).name}</strong></p>
+            <form onSubmit={handleSendInvite}>
+              <div className="mb-6">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Opção 1: Enviar por Email</label>
+                <input type="email" name="email" defaultValue={inviteModalEmail || ''} className="w-full border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none input-focus-effect" placeholder="exemplo@email.com" />
               </div>
-            </div>
-          </div>
-        )
-      }
 
-      {/* INVITE MODAL (Moved to end for z-index stacking) */}
-      {
-        isInviteModalOpen && selectedTeamIdForInvite && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in zoom-in-95">
-            <div className="glass-panel rounded-2xl p-8 max-w-sm w-full relative">
-              <button onClick={() => { setIsInviteModalOpen(false); setSelectedTeamIdForInvite(null); setInviteModalEmail(null); }} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 btn-feedback"><X size={20} /></button>
-              <h3 className="font-bold text-xl mb-2 text-slate-800">Convidar Membro</h3>
-              <p className="text-sm text-slate-500 mb-6">Para <strong>{getTeam(selectedTeamIdForInvite).name}</strong></p>
-              <form onSubmit={handleSendInvite}>
-                <div className="mb-6">
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Opção 1: Enviar por Email</label>
-                  <input type="email" name="email" defaultValue={inviteModalEmail || ''} className="w-full border border-slate-300 rounded-xl p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none input-focus-effect" placeholder="exemplo@email.com" />
+              <div className="mb-6">
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Opção 2: Link de Convite</label>
+                <div className="flex gap-2">
+                  <input
+                    readOnly
+                    value={`${window.location.origin}?joinTeam=${selectedTeamIdForInvite}`}
+                    className="w-full border border-slate-300 bg-slate-50 rounded-xl p-3 text-xs text-slate-600 focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}?joinTeam=${selectedTeamIdForInvite}`);
+                      alert("Link copiado para a área de transferência!");
+                    }}
+                    className="bg-slate-200 hover:bg-slate-300 text-slate-700 p-3 rounded-xl transition btn-feedback"
+                    title="Copiar Link"
+                  >
+                    <Copy size={18} />
+                  </button>
                 </div>
+                <p className="text-[10px] text-slate-400 mt-2 leading-tight">Envie este link no grupo do WhatsApp. Quem clicar entrará direto no time.</p>
+              </div>
 
-                <div className="mb-6">
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Opção 2: Link de Convite</label>
-                  <div className="flex gap-2">
-                    <input
-                      readOnly
-                      value={`${window.location.origin}?joinTeam=${selectedTeamIdForInvite}`}
-                      className="w-full border border-slate-300 bg-slate-50 rounded-xl p-3 text-xs text-slate-600 focus:outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(`${window.location.origin}?joinTeam=${selectedTeamIdForInvite}`);
-                        alert("Link copiado para a área de transferência!");
-                      }}
-                      className="bg-slate-200 hover:bg-slate-300 text-slate-700 p-3 rounded-xl transition btn-feedback"
-                      title="Copiar Link"
-                    >
-                      <Copy size={18} />
-                    </button>
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-2 leading-tight">Envie este link no grupo do WhatsApp. Quem clicar entrará direto no time.</p>
-                </div>
-
-                <button type="submit" className="btn-feedback w-full bg-emerald-600 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200">Enviar Convite (Email)</button>
-              </form>
-            </div>
+              <button type="submit" className="btn-feedback w-full bg-emerald-600 text-white py-3 rounded-xl text-sm font-bold shadow-lg shadow-emerald-200">Enviar Convite (Email)</button>
+            </form>
           </div>
-        )
-      }
+        </div>
+      )
+    }
 
-      {/* END APP */}
+    {/* END APP */}
 
-    </div >
-  );
+  </div >
+);
 };
 
 export default App;
