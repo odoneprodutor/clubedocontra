@@ -2993,10 +2993,9 @@ const App: React.FC = () => {
                                 {p.isInjured && <span className="text-[9px] font-bold text-red-500 flex items-center gap-1"><Stethoscope size={9} /> DM</span>}
                               </div>
                             </div>
-
                             <ChevronRight size={16} className="text-slate-300 group-hover:text-emerald-500 group-hover:translate-x-1 transition-transform" />
+
                           </div>
-                          <ChevronRight size={20} />
                         </div>
                       );
                     })}
